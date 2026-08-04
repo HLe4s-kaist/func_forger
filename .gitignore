@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Func-Forger generates code into ./library by default. This is your forged
+# codebase, so it is NOT ignored -- version it if you want. Uncomment to ignore:
+# library/
