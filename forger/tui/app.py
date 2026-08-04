@@ -27,6 +27,7 @@ from pathlib import Path
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.color import Color
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
@@ -263,6 +264,25 @@ class ForgeApp(App):
         self._last_status_msg = msg
         self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
 
+    def _flash(self, widget, color: str = "green", hold: float = 0.18) -> None:
+        """A brief "whoosh": pulse a widget's background to ``color`` and back.
+
+        Purely cosmetic, so any failure is swallowed to never interrupt the flow.
+        """
+        try:
+            target = Color.parse(color)
+            original = widget.styles.background
+            widget.styles.animate(
+                "background",
+                target,
+                duration=hold,
+                on_complete=lambda: widget.styles.animate(
+                    "background", original, duration=hold
+                ),
+            )
+        except Exception:
+            pass
+
     @on(VimTextArea.ModeChanged)
     def _on_vim_mode(self, message: VimTextArea.ModeChanged) -> None:
         self._vim_mode = message.mode
@@ -366,6 +386,7 @@ class ForgeApp(App):
         if not skeleton.strip():
             self._set_status("(editor is empty — write a skeleton first)")
             return
+        self._flash(self.query_one("#status", Static), "cyan")
         self._do_forge(skeleton)
 
     @work(thread=True, exclusive=True)
@@ -473,6 +494,7 @@ class ForgeApp(App):
             self.manifest.upsert(entry)
         self.manifest.persist()
         self._refresh_sidebar()
+        self._flash(self.query_one("#sidebar"), "green")
         editor.text = ""
         editor.read_only = False
         self._last_module = None
