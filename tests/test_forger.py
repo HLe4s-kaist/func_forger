@@ -417,7 +417,7 @@ def test_null_embedder_is_unavailable():
 # -- repo ingestion --------------------------------------------------------
 
 
-def test_ingest_is_readonly_and_incremental():
+def test_ingest_is_readonly_and_indexes_real_paths():
     os.environ["FORGER_INDEX_DIR"] = str(Path(tempfile.mkdtemp()) / "idx")
     from forger.ingest import ingest, manifest_path_for
 
@@ -430,11 +430,7 @@ def test_ingest_is_readonly_and_incremental():
     (root / "README.md").write_text("# readme\n")  # not source
 
     class IngestLLM:
-        def __init__(self):
-            self.calls = 0
-
         def complete(self, system, messages, *, model=None):
-            self.calls += 1
             content = messages[0]["content"]
             if "def add" in content:
                 return ('{"language":"python","definitions":[{"name":"add",'
@@ -446,21 +442,14 @@ def test_ingest_is_readonly_and_incremental():
                         '"description":"c sum"}]}')
             return '{"language":"x","definitions":[]}'
 
-    llm = IngestLLM()
-    manifest, files, reanalyzed, defs = ingest(root, llm)
-    assert files == 2 and reanalyzed == 2 and defs == 2
+    manifest, files, defs = ingest(root, IngestLLM())
+    assert files == 2 and defs == 2
     assert manifest.get("python", "add").file_path == "src/add.py"
     assert manifest.get("c", "add").file_path == "src/math.c"
     # The repository itself is never written to.
     assert not (root / "manifest.json").exists()
-    assert manifest_path_for(root).exists()  # index lives outside the repo
-
-    # Incremental: re-ingest with no changes -> no new LLM calls, entries retained.
-    before = llm.calls
-    manifest2, _files2, reanalyzed2, defs2 = ingest(root, llm)
-    assert reanalyzed2 == 0
-    assert llm.calls == before
-    assert defs2 == defs
+    # The index lives outside the repo (under FORGER_INDEX_DIR here).
+    assert manifest_path_for(root).exists()
 
 
 # -- agentic forge seeding -------------------------------------------------

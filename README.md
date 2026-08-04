@@ -163,18 +163,15 @@ forger --library ./my_repo         # now forge as usual; existing definitions ar
 Ingestion is language-agnostic (the LLM does the analysis — no per-language
 parser). A few things to know:
 
-- **Read-only.** Your repository is never modified. The index (manifest +
-  per-file fingerprints) lives *outside* it, at `~/.forger/repos/<slug>/`
-  (override with `FORGER_INDEX_DIR`), and is found automatically when you forge
-  against the repo.
-- **Incremental.** A fingerprint per file is kept, so re-running `ingest` only
-  re-analyzes files that changed and drops entries for deleted ones —
-  re-indexing a large repo after a small edit is cheap.
+- **Read-only.** Your repository is never modified. The index (a manifest) is
+  written *outside* it, in your current directory at `./forger-index/<repo>/`
+  (override with `--index <dir>` or `FORGER_INDEX_DIR`); run `forger` from the
+  same directory (or pass `--index`) so it finds the index.
 - **Cost & accuracy.** Because the LLM does the analysis it is *approximate*: it
-  may miss or mis-describe some definitions, and it costs one LLM call per
-  *changed* source file. Noisy directories (`.git`, `node_modules`, `venv`,
-  `build`, `target`, …) and files over 200 KB are skipped; `--max-files N` caps
-  the run for large repositories.
+  may miss or mis-describe some definitions, and it costs one LLM call per source
+  file. Noisy directories (`.git`, `node_modules`, `venv`, `build`, `target`, …)
+  and files over 200 KB are skipped; `--max-files N` caps the run for large
+  repositories.
 
 ## Running
 

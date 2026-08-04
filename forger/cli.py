@@ -38,6 +38,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="semantic search backend: none | fastembed | sentence-transformers",
     )
     parser.add_argument("--embed-model", help="local embedding model name")
+    parser.add_argument(
+        "--index",
+        help="manifest/index directory (defaults to ./forger-index/<repo>/ in the cwd)",
+    )
     return parser
 
 
@@ -52,8 +56,10 @@ def main(argv: list[str] | None = None) -> None:
         config.library_dir = Path(ns.library)
         # If this repo was ingested, use its read-only index (kept outside the repo).
         from forger.ingest import manifest_path_for
-        if manifest_path_for(ns.library).exists():
-            config.manifest_override = manifest_path_for(ns.library)
+        if manifest_path_for(ns.library, ns.index).exists():
+            config.manifest_override = manifest_path_for(ns.library, ns.index)
+    if ns.index:
+        config.manifest_override = Path(ns.index) / "manifest.json"
     if ns.provider:
         config.provider = ns.provider
     if ns.model:
@@ -88,6 +94,7 @@ def _run_ingest(argv: list[str]) -> None:
     parser.add_argument("--base-url", dest="base_url", help="API base URL")
     parser.add_argument("--lang", help="default target language (fallback)")
     parser.add_argument("--max-files", type=int, default=None, help="stop after this many files")
+    parser.add_argument("--index", help="where to write the index (defaults to ./forger-index/<repo>/)")
     ns = parser.parse_args(argv)
 
     config = Config.from_env()
@@ -106,17 +113,15 @@ def _run_ingest(argv: list[str]) -> None:
     llm = make_provider(config)
 
     def progress(done: int, total: int, rel: str, added: int) -> None:
-        if added < 0:
-            print(f"  [{done}/{total}] {rel}  (unchanged, skipped)")
-        else:
-            print(f"  [{done}/{total}] {rel}  (+{added} definition{'s' if added != 1 else ''})")
+        print(f"  [{done}/{total}] {rel}  (+{added} definition{'s' if added != 1 else ''})")
 
-    manifest, files, reanalyzed, defs = ingest(
-        ns.repo_dir, llm, max_files=ns.max_files, on_progress=progress
+    manifest, files, defs = ingest(
+        ns.repo_dir, llm, max_files=ns.max_files, on_progress=progress,
+        index_override=ns.index,
     )
     print(
-        f"Indexed {files} file(s) ({reanalyzed} re-analyzed), "
-        f"{defs} definition(s) -> {manifest_path_for(ns.repo_dir)}"
+        f"Indexed {files} file(s), {defs} definition(s) -> "
+        f"{manifest_path_for(ns.repo_dir, ns.index)}"
     )
     print("The repository was not modified. Now forge on it:  forger --library " + ns.repo_dir)
 

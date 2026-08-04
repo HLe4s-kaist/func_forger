@@ -4,26 +4,24 @@ Point Func-Forger at an existing codebase so its definitions become first-class,
 searchable, reusable library entries -- then forge new functions that compose
 the ones already there.
 
-The repository is treated as READ-ONLY: source files are only read. The index
-(manifest + per-file fingerprints) lives OUTSIDE the repo, at
-``~/.forger/repos/<slug>/`` (override with ``FORGER_INDEX_DIR``), so ingesting
-never adds or modifies anything in your project.
+The repository is treated as READ-ONLY: source files are only read, never
+written. The index (a single manifest) is created OUTSIDE the repo, in your
+current working directory at ``./forger-index/<repo>/manifest.json`` (override
+with ``--index <dir>`` or the ``FORGER_INDEX_DIR`` environment variable). Run
+``forger`` from the same directory (or pass ``--index``) so it finds the index.
 
-    forger ingest ./my_repo            # read-only; index written to ~/.forger/...
+This is a one-shot first-time index: every source file is analyzed once.
+
+    forger ingest ./my_repo            # read-only; index written to ./forger-index/my_repo/
     forger --library ./my_repo          # forge on top of the repo; the matching
-                                        # index is found automatically
+                                        # index (in ./forger-index/) is found automatically
 
-Incremental: a per-file fingerprint is kept, so re-running ``ingest`` only
-re-analyzes files that changed (and drops entries for deleted files). The
-analysis itself is done by the LLM (language-agnostic -- no per-language parser),
-which means it is approximate and costs one LLM call per changed source file;
-see the README for the caveats.
+The analysis is done by the LLM (language-agnostic -- no per-language parser),
+so it is approximate and costs one LLM call per source file; see the README.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 from pathlib import Path
 
@@ -56,7 +54,7 @@ _EXCLUDE_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "venv", ".venv", "env", ".env",
     "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     "build", "dist", "target", "out", ".next", ".nuxt", "vendor",
-    ".idea", ".vscode", ".forger", "site-packages",
+    ".idea", ".vscode", ".forger", "forger-index", "site-packages",
 }
 
 _MAX_FILE_BYTES = 200_000
@@ -76,19 +74,18 @@ meaningful, return {"language":"...","definitions":[]}.
 """
 
 
-def _index_base() -> Path:
-    override = os.environ.get("FORGER_INDEX_DIR")
-    return Path(override) if override else Path.home() / ".forger"
+def index_dir_for(repo_dir: str | Path, override: str | None = None) -> Path:
+    """Where a repo's read-only index lives (outside the repo, in the cwd)."""
+    if override:
+        return Path(override)
+    env = os.environ.get("FORGER_INDEX_DIR")
+    if env:
+        return Path(env)
+    return Path.cwd() / "forger-index" / Path(repo_dir).resolve().name
 
 
-def index_dir_for(repo_dir: str | Path) -> Path:
-    """Where a repo's read-only index lives (outside the repo)."""
-    slug = hashlib.sha1(str(Path(repo_dir).resolve()).encode()).hexdigest()[:16]
-    return _index_base() / "repos" / slug
-
-
-def manifest_path_for(repo_dir: str | Path) -> Path:
-    return index_dir_for(repo_dir) / "manifest.json"
+def manifest_path_for(repo_dir: str | Path, override: str | None = None) -> Path:
+    return index_dir_for(repo_dir, override) / "manifest.json"
 
 
 def language_for_file(path: Path) -> str | None:
@@ -115,61 +112,30 @@ def walk_source_files(repo_dir: Path, max_files: int | None = None) -> list[Path
     return sorted(files)
 
 
-def _fingerprint(path: Path) -> str:
-    st = path.stat()
-    return f"{st.st_mtime_ns}:{st.st_size}"
-
-
-def _load_json(path: Path) -> dict:
-    if path.is_file():
-        try:
-            return json.loads(path.read_text())
-        except Exception:
-            return {}
-    return {}
-
-
 def ingest(
     repo_dir: str | Path,
     llm,
     max_files: int | None = None,
     on_progress=None,
-) -> tuple[Manifest, int, int, int]:
-    """Index ``repo_dir`` into its (separate, read-only) index.
+    index_override: str | None = None,
+) -> tuple[Manifest, int, int]:
+    """Index ``repo_dir`` (read-only) into its separate index.
 
-    Returns ``(manifest, files_total, files_reanalyzed, definitions)``.
-    Re-runs are incremental: only changed files are re-analyzed and deleted
-    files' entries are dropped.
+    Returns ``(manifest, files_total, definitions)``. This is a one-shot full
+    index: every source file is analyzed once.
     """
     repo = Path(repo_dir)
     if not repo.is_dir():
         raise NotADirectoryError(f"{repo} is not a directory")
-    index_dir = index_dir_for(repo)
+    index_dir = index_dir_for(repo, index_override)
     index_dir.mkdir(parents=True, exist_ok=True)
     manifest = Manifest(index_dir / "manifest.json")
-    state_path = index_dir / "files.json"
-    prev_state = _load_json(state_path)
+    manifest.entries.clear()  # full rebuild each run (one-shot)
 
     files = walk_source_files(repo, max_files=max_files)
-    new_state: dict[str, str] = {}
-    seen: set[str] = set()
-    reanalyzed = 0
-
+    defs_total = 0
     for index, path in enumerate(files, start=1):
         rel = path.relative_to(repo).as_posix()
-        seen.add(rel)
-        fingerprint = _fingerprint(path)
-        new_state[rel] = fingerprint
-
-        if prev_state.get(rel) == fingerprint:
-            if on_progress:
-                on_progress(index, len(files), rel, -1)  # unchanged -> skipped
-            continue
-
-        # Changed/new: drop this file's old entries, then re-analyze.
-        for entry in [e for e in manifest.all() if e.file_path == rel]:
-            manifest.entries.pop(entry.id, None)
-        reanalyzed += 1
         language = language_for_file(path) or "python"
         try:
             code = path.read_text(encoding="utf-8", errors="ignore")
@@ -201,13 +167,9 @@ def ingest(
                 )
             )
             added += 1
+        defs_total += added
         if on_progress:
             on_progress(index, len(files), rel, added)
 
-    # Drop entries whose source file no longer exists.
-    for entry in [e for e in manifest.all() if e.file_path not in seen]:
-        manifest.entries.pop(entry.id, None)
-
     manifest.persist()
-    state_path.write_text(json.dumps(new_state, indent=2))
-    return manifest, len(files), reanalyzed, len(manifest.all())
+    return manifest, len(files), defs_total
