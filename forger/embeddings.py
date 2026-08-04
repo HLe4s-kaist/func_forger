@@ -20,6 +20,7 @@ Design notes:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable, Protocol
 
 # Default local models (downloaded & cached on first use).
@@ -108,7 +109,11 @@ def make_embedder(config) -> Embedder:
         return NullEmbedder()
     model = getattr(config, "embed_model", None) or DEFAULT_MODELS.get(provider)
     try:
-        if provider == "fastembed":
+        if model and Path(model).is_dir():
+            # A local model directory (e.g. a bundled/restored model) loads
+            # directly via sentence-transformers, regardless of the provider.
+            backend = _SentenceTransformersBackend(model)
+        elif provider == "fastembed":
             backend = _FastEmbedBackend(model)
         elif provider in ("sentence-transformers", "sbert", "sentence_transformers"):
             backend = _SentenceTransformersBackend(model)

@@ -93,6 +93,35 @@ generic stopwords, and scoring weights the **name** above the **description**
 above the **doc**, so a query like `sum two integers` finds `add` even with no
 shared surface form. This is what lets `double_sum` reuse `add` automatically.
 
+## Embedding search (optional)
+
+The default search is dependency-free token overlap. For semantic matching, plug
+in a **local embedding model** (a vetted, well-known one such as
+`BAAI/bge-small-en-v1.5` or `all-MiniLM-L6-v2`):
+
+```bash
+pip install -e ".[embeddings]"   # fastembed (ONNX-based, no torch)
+# or: pip install -e ".[sbert]"  # sentence-transformers
+forger --embed-provider fastembed                       # default model, auto-downloaded
+forger --embed-provider sentence-transformers --embed-model BAAI/bge-small-en-v1.5
+```
+
+The model is downloaded and cached on first use by those libraries.
+
+**Fully offline / air-gapped** — bundle the model into the repo. GitHub rejects
+files over 100 MB, so the included scripts compress + split it:
+
+```bash
+python scripts/pack_model.py <model_dir> models/MyModel 50   # 50 MB chunks
+git add models/MyModel
+# on the target machine:
+python scripts/install_model.py models/MyModel ~/.forger_models/MyModel
+forger --embed-provider sentence-transformers --embed-model ~/.forger_models/MyModel
+```
+
+Prefer auto-download or Git LFS when you can; committing the chunks permanently
+bloats git history.
+
 ## Language-agnostic
 
 Generated code can be in **any language**. Because Func-Forger never executes
