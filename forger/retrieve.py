@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 
+from forger.embeddings import Embedder, embedding_search
 from forger.manifest import Manifest, ManifestEntry
 from forger.spec import DefSpec
 
@@ -81,11 +82,30 @@ def _section_score(query: set[str], name: str, description: str, doc: str) -> fl
 
 
 def search_library(
-    query: str, manifest: Manifest, language: str | None = None, top_k: int = 8
+    query: str,
+    manifest: Manifest,
+    language: str | None = None,
+    top_k: int = 8,
+    embedder: Embedder | None = None,
 ) -> list[ManifestEntry]:
-    """Free-text search over the library (the agent's search tool + auto-seed)."""
+    """Free-text search over the library (the agent's search tool + auto-seed).
+
+    Uses semantic embedding search when an embedder is configured; otherwise
+    falls back to token-overlap ranking.
+    """
+    query = query or ""
+    if embedder is not None and embedder.available() and query.strip():
+        entries = [
+            e for e in manifest.all()
+            if language is None or e.target_language == language
+        ]
+        hits = embedding_search(query, entries, embedder, top_k)
+        if hits:
+            return hits
+        # no semantic hits -> fall through to token search
+
     query_tokens = _tokens(query)
-    query_lower = (query or "").lower()
+    query_lower = query.lower()
     if not query_tokens and not query_lower:
         return []
 

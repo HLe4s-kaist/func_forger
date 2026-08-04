@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from forger.embeddings import Embedder
 from forger.implementer import extract_code_block
 from forger.manifest import Manifest, ManifestEntry
 from forger.retrieve import search_library
@@ -187,6 +188,7 @@ def forge_documented(
     max_turns: int = 6,
     on_turn=None,
     own_names: set[str] | None = None,
+    embedder: Embedder | None = None,
 ) -> ForgeResult:
     """Run the agent to turn ``skeleton`` into a documented, implemented module.
 
@@ -201,7 +203,7 @@ def forge_documented(
     if len(same_language) <= SEED_ALL_LIMIT:
         seed_hits = same_language
     else:
-        seed_hits = search_library(skeleton, manifest, language, top_k=12)
+        seed_hits = search_library(skeleton, manifest, language, top_k=12, embedder=embedder)
     context = ""
     if seed_hits:
         lines = ["Available library definitions (REUSE these wherever reasonable):"]
@@ -248,7 +250,7 @@ def forge_documented(
             all_searches.extend(new_searches)
             all_searches.extend(f"LOOKUP:{n}" for n in new_lookups)
             blocks = [
-                _format_results(q, search_library(q, manifest, language))
+                _format_results(q, search_library(q, manifest, language, embedder=embedder))
                 for q in new_searches
             ]
             blocks.extend(

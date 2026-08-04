@@ -374,6 +374,45 @@ def test_same_name_different_kind_coexist():
     assert m.get("c", "Foo").kind == "function"
 
 
+# -- embedding search ------------------------------------------------------
+
+
+class _BagOfWordsEmbedder:
+    """Deterministic bag-of-words embedder for testing semantic ranking."""
+    VOCAB = ["sum", "add", "integer", "integers", "two", "distance", "point",
+             "euclidean", "max", "minimum", "string", "capitalize"]
+
+    def available(self) -> bool:
+        return True
+
+    def _vec(self, text: str) -> list[float]:
+        words = {w.strip(".,;:!?()") for w in (text or "").lower().split()}
+        return [1.0 if w in words else 0.0 for w in self.VOCAB]
+
+    def embed_query(self, query: str) -> list[float]:
+        return self._vec(query)
+
+    def embed_one(self, text: str) -> list[float]:
+        return self._vec(text)
+
+
+def test_embedding_search_ranks_add_for_sum_query():
+    hits = search_library("sum two integers", _search_lib(), "python",
+                          embedder=_BagOfWordsEmbedder())
+    assert hits and hits[0].name == "add"
+
+
+def test_search_falls_back_to_tokens_without_embedder():
+    # No embedder -> token overlap path still works.
+    hits = search_library("sum two integers", _search_lib(), "python")
+    assert hits and hits[0].name == "add"
+
+
+def test_null_embedder_is_unavailable():
+    from forger.embeddings import NullEmbedder
+    assert NullEmbedder().available() is False
+
+
 # -- agentic forge seeding -------------------------------------------------
 
 

@@ -18,6 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 ui = ["prompt_toolkit>=3.0", "rich>=13.0"]
+embeddings = ["fastembed>=0.2"]
+sbert = ["sentence-transformers>=2.5"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]

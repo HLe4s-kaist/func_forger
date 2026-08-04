@@ -56,6 +56,8 @@ class Config:
     model: str | None = None
     api_key: str | None = None
     session_language: str | None = None  # canonical, or None
+    embed_provider: str | None = None  # none | fastembed | sentence-transformers
+    embed_model: str | None = None  # local embedding model name
 
     def resolved_model(self) -> str:
         if self.model:
@@ -94,4 +96,6 @@ class Config:
             library_dir=Path(lib) if lib else Path("./library"),
             provider=prov,
             session_language=lang,
+            embed_provider=os.environ.get("FORGER_EMBED_PROVIDER"),
+            embed_model=os.environ.get("FORGER_EMBED_MODEL"),
         )

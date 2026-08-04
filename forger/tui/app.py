@@ -36,6 +36,7 @@ from textual.widgets.option_list import Option
 
 from forger.agent import ForgeError, _used_names, forge_documented, regen_range
 from forger.config import Config, canonical_language
+from forger.embeddings import make_embedder
 from forger.implementer import ImplementedModule
 from forger.input import InputKind, normalize
 from forger.library import ext_for, write_module
@@ -211,6 +212,7 @@ class ForgeApp(App):
         self.config = config
         self.manifest = Manifest(config.manifest_path)
         self.llm = make_provider(config)
+        self.embedder = make_embedder(config)
         self.language = config.session_language or "c"
         self._last_module = None
         self._last_result = None
@@ -246,6 +248,10 @@ class ForgeApp(App):
     def on_mount(self) -> None:
         self.title = "Func-Forger"
         self.sub_title = f"provider: {self.config.provider} · model: {self.config.resolved_model()}"
+        embed_status = (
+            f"embed: {self.config.embed_provider}" if self.embedder.available() else "embed: off"
+        )
+        self.sub_title += f" · {embed_status}"
         self._set_editor_language(self.language)
         self._refresh_sidebar()
         self._set_status(self._entry_hint())
@@ -418,7 +424,7 @@ class ForgeApp(App):
             self.call_from_thread(self._set_language, module.target_language)
             result = forge_documented(
                 skeleton, module.target_language, self.manifest, self.llm,
-                on_turn=on_turn, own_names=set(module.names()),
+                on_turn=on_turn, own_names=set(module.names()), embedder=self.embedder,
             )
             self.call_from_thread(self._finish_forging, result)
         except Exception as exc:

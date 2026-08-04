@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", help="model id (e.g. glm-4.6, claude-sonnet-4-6, gpt-4o-mini)")
     parser.add_argument("--base-url", dest="base_url", help="API base URL")
     parser.add_argument("--lang", help="default target language for natural-language input")
+    parser.add_argument(
+        "--embed-provider",
+        help="semantic search backend: none | fastembed | sentence-transformers",
+    )
+    parser.add_argument("--embed-model", help="local embedding model name")
     return parser
 
 
@@ -48,6 +53,10 @@ def main(argv: list[str] | None = None) -> None:
         config.base_url = args.base_url
     if args.lang:
         config.session_language = canonical_language(args.lang)
+    if args.embed_provider:
+        config.embed_provider = args.embed_provider
+    if args.embed_model:
+        config.embed_model = args.embed_model
 
     if args.repl:
         from forger.repl import REPL
