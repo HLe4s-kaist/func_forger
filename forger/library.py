@@ -134,10 +134,10 @@ def write_module(
     known_used_ids: list[str] = []
     unknown_deps: list[str] = []
     for name in implemented.used_names:
-        if manifest.get(language, name):
-            dep_id = f"{language}:{name}"
-            if dep_id not in known_used_ids:
-                known_used_ids.append(dep_id)
+        dep = manifest.get(language, name)
+        if dep:
+            if dep.id not in known_used_ids:
+                known_used_ids.append(dep.id)
         elif name not in unknown_deps:
             unknown_deps.append(name)
 
@@ -154,7 +154,7 @@ def write_module(
                 doc=_extract_doc(implemented.code, fn.name),
                 params=[{"name": n, "type": t} for n, t in fn.params],
                 return_type=fn.return_type,
-                depends_on=list(known_used_ids),
+                depends_on=list(known_used_ids) if fn.kind == "function" else [],
                 imported_by=[],
                 created_at=now,
             )

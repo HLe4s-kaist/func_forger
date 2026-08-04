@@ -68,6 +68,7 @@ A two-pane terminal app:
 | `Ctrl+L` | Focus the function list |
 | `F2` | Set the target language |
 | `F3` | Open the buffer in `$EDITOR` (vim proxy) |
+| `F4` | Open the **LLM backend** settings (provider / base URL / model / key) |
 | `Ctrl+Q` | Quit |
 
 ### The forge flow

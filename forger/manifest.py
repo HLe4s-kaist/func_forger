@@ -37,7 +37,9 @@ class ManifestEntry:
 
     @property
     def id(self) -> str:
-        return f"{self.target_language}:{self.name}"
+        # kind is part of identity so a function and a type (etc.) with the same
+        # name can coexist instead of silently overwriting each other.
+        return f"{self.target_language}:{self.kind}:{self.name}"
 
     def to_dict(self) -> dict:
         return {
@@ -98,7 +100,19 @@ class Manifest:
         return list(self.entries.values())
 
     def get(self, language: str, name: str) -> ManifestEntry | None:
-        return self.entries.get(f"{language}:{name}")
+        """Find an entry by language + name (any kind). Prefers functions."""
+        matches = [
+            e for e in self.entries.values()
+            if e.target_language == language and e.name == name
+        ]
+        if not matches:
+            return None
+        # Prefer a function when a name is shared across kinds (e.g. a type and
+        # a constructor); call sites usually want the callable.
+        for entry in matches:
+            if entry.kind == "function":
+                return entry
+        return matches[0]
 
     def upsert(self, entry: ManifestEntry) -> None:
         """Insert or replace an entry keyed by its id."""

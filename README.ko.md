@@ -64,6 +64,7 @@
 | `Ctrl+L` | 함수 목록으로 포커스 |
 | `F2` | 대상 언어 설정 |
 | `F3` | 버퍼를 `$EDITOR`(vim)로 열기 |
+| `F4` | **LLM 백엔드** 설정 열기 (provider / base URL / model / key) |
 | `Ctrl+Q` | 종료 |
 
 ### Forge 흐름

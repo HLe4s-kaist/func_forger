@@ -233,9 +233,9 @@ def test_write_module_and_imported_by():
 
     assert (Path(d) / "python" / "double_sum.py").exists()
     assert result.entries[0].name == "double_sum"
-    assert result.entries[0].depends_on == ["python:add"]
+    assert result.entries[0].depends_on == ["python:function:add"]
     # back-filled reverse edge
-    assert "python:double_sum" in m.get("python", "add").imported_by
+    assert "python:function:double_sum" in m.get("python", "add").imported_by
     assert result.unknown_deps == []
 
 
@@ -357,6 +357,21 @@ def test_search_camelcase_identifier_split():
     ))
     hits = search_library("csv parsing", m, "python")
     assert hits and hits[0].name == "parseCSV"
+
+
+def test_same_name_different_kind_coexist():
+    """A type and a function sharing a name must not silently overwrite each other."""
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(name="Foo", target_language="c", kind="type",
+        signature="struct Foo {}", file_path="c/a.c"))
+    m.upsert(ManifestEntry(name="Foo", target_language="c", kind="function",
+        signature="Foo()", file_path="c/b.c"))
+    foos = [e for e in m.all() if e.name == "Foo"]
+    assert len(foos) == 2
+    assert {e.kind for e in foos} == {"type", "function"}
+    # get() prefers the function when names collide
+    assert m.get("c", "Foo").kind == "function"
 
 
 # -- agentic forge seeding -------------------------------------------------

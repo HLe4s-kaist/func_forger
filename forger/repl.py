@@ -217,7 +217,7 @@ class REPL:
         for lang in sorted(by_lang):
             print(f"{lang}/")
             for e in sorted(by_lang[lang], key=lambda x: x.name):
-                deps = ", ".join(d.split(":", 1)[1] for d in e.depends_on)
+                deps = ", ".join(d.rsplit(":", 1)[-1] for d in e.depends_on)
                 tail = f"  -> {deps}" if deps else ""
                 print(f"  {e.name}  [{e.file_path}]{tail}")
 
