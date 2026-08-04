@@ -26,6 +26,11 @@ from forger.implementer import extract_code_block
 from forger.manifest import Manifest, ManifestEntry
 from forger.retrieve import search_library
 
+# When the same-language library is small, seed the agent with EVERY function so
+# it always sees each one's exact calling convention (no search miss -> no
+# guessed/wrong signatures). Only rank by relevance once the library is large.
+SEED_ALL_LIMIT = 20
+
 AGENT_SYSTEM = """\
 You implement function bodies in a target programming language, reusing an \
 existing function library.
@@ -58,6 +63,10 @@ for the target language) instead of reimplementing that logic. Build new \
 functions by composing existing ones wherever you can. You may still run extra \
 SEARCH queries for anything not yet listed. NEVER invent or call a library \
 function that did not appear in the available list or in your search results.
+- When you CALL a library function, use its signature EXACTLY as listed -- the \
+same argument ORDER, TYPES, and COUNT. Never guess a signature. If a function \
+you want to reuse is not in the available list, run a SEARCH for it first \
+rather than calling it from memory.
 - Include any imports the module needs.
 - After any SEARCH: lines, output ONLY the code block.
 """
@@ -137,8 +146,14 @@ def forge_documented(
     UI can show progress (e.g. "searching: ..."). It is optional.
     """
     # Auto-seed: surface reusable library functions up front so the agent composes
-    # them into the new code even when it does not emit a SEARCH query.
-    seed_hits = search_library(skeleton, manifest, language, top_k=10)
+    # them into the new code even when it does not emit a SEARCH query. For a small
+    # library, seed ALL same-language functions so the agent knows every exact
+    # signature (prevents wrong argument count/type/count at the call site).
+    same_language = [e for e in manifest.all() if e.target_language == language]
+    if len(same_language) <= SEED_ALL_LIMIT:
+        seed_hits = same_language
+    else:
+        seed_hits = search_library(skeleton, manifest, language, top_k=12)
     context = ""
     if seed_hits:
         lines = ["Available library functions (REUSE these wherever reasonable):"]

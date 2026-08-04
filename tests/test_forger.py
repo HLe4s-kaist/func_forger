@@ -20,6 +20,7 @@ from forger.input import InputKind, classify, normalize
 from forger.library import write_module
 from forger.manifest import Manifest, ManifestEntry
 from forger.retrieve import retrieve, search_library
+from forger.agent import forge_documented
 from forger.spec import FuncSpec, ModuleSpec
 
 
@@ -356,6 +357,33 @@ def test_search_camelcase_identifier_split():
     ))
     hits = search_library("csv parsing", m, "python")
     assert hits and hits[0].name == "parseCSV"
+
+
+# -- agentic forge seeding -------------------------------------------------
+
+
+def test_forge_seeds_all_small_library():
+    """A small library seeds EVERY same-language function so the agent always
+    sees each one's exact signature (no search miss -> no wrong call)."""
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="parse_csv", target_language="python", signature="parse_csv(s: str) -> list",
+        description="parse csv", file_path="python/p.py"))
+    m.upsert(ManifestEntry(
+        name="multiply", target_language="python", signature="multiply(a: int, b: int) -> int",
+        description="multiply", file_path="python/m.py"))
+    captured = {}
+
+    class SeedCaptureLLM:
+        def complete(self, system, messages, *, model=None):
+            captured["msg"] = messages[0]["content"]
+            return "```python\ndef add(a, b):\n    return a + b\n```\n"
+
+    forge_documented("def add(a, b): ...", "python", m, SeedCaptureLLM())
+    # Both functions are textually unrelated to "add", yet must be seeded.
+    assert "parse_csv" in captured["msg"]
+    assert "multiply" in captured["msg"]
 
 
 # -- standalone runner -----------------------------------------------------
