@@ -124,8 +124,8 @@ straightforward — and that validation is left to the human, by design.
 
 ```bash
 pip install -e .                 # installs anthropic, openai, textual
-forger                           # work in ./library (default)
-forger --library ./my_project    # work on an existing project (re-indexed on every startup)
+forger                           # work in ./library (default); embeddings on by default
+forger --library ./my_project    # work on an existing project (indexed once on first run)
 forger --provider openai-compat --base-url http://localhost:11434/v1 --model llama3.1
 ```
 
@@ -135,21 +135,34 @@ Bring your own model. Func-Forger talks to any LLM API you configure:
 - **Open-source / self-hosted** — anything behind an OpenAI-compatible endpoint
   (Ollama, vLLM, LM Studio, Together, Groq, …) or an Anthropic-compatible proxy.
 
-Provider, base URL, model, and API key are set via CLI flags, environment
-variables, or the in-app backend screen (`F4`). Credentials are read from the
-usual environment variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` /
-`OPENAI_API_KEY`, optional `*_BASE_URL`).
+### Command-line options
 
-**Two things to know about working on an existing project:**
+| Flag | Env var | Description |
+|---|---|---|
+| `--library`, `-l` | `FORGER_LIBRARY` | library/codebase directory (default: `./library`) |
+| `--provider` | `FORGER_PROVIDER` | LLM backend: `anthropic` \| `openai-compat` (default: `anthropic`) |
+| `--model` | `FORGER_MODEL` | model id (e.g. `glm-4.6`, `claude-sonnet-4-6`, `gpt-4o-mini`) |
+| `--base-url` | `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` | API base URL |
+| `--lang` | `FORGER_LANG` | default target language |
+| `--embed-provider` | `FORGER_EMBED_PROVIDER` | semantic search: `fastembed` \| `sentence-transformers` \| `none` (default: `fastembed`) |
+| `--embed-model` | `FORGER_EMBED_MODEL` | embedding model id or local path (default: `BAAI/bge-small-en-v1.5`) |
+| `--embed` | — | enable semantic search (same as the default) |
+| `--no-embed` | — | disable semantic search (token search only) |
+| `--repl` | — | use the legacy conversational REPL instead of the TUI |
+
+API keys are read from `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` or
+`OPENAI_API_KEY`. Backend settings can also be changed live in the app with `F4`.
+
+**Working on an existing project:**
 
 - Func-Forger **modifies the directory** it works in — it writes `manifest.json`
   and adds newly forged files. **Back up your original first.**
-- It **re-indexes the directory on every startup** (full rebuild), so the index
-  always reflects your current source. Indexing is *approximate* (the LLM may
-  miss or mis-describe some definitions) and costs one LLM call per source file,
-  so a large project takes time on each launch. Non-text (binary) files are
-  skipped automatically, as are noisy directories (`.git`, `node_modules`,
-  `venv`, `build`, …).
+- It **indexes the directory once, on first run** (when no `manifest.json` exists
+  yet). After that the manifest persists; to re-index after big edits, delete
+  `manifest.json` and relaunch. Indexing is *approximate* (the LLM may miss or
+  mis-describe some definitions) and costs one LLM call per source file. Non-text
+  (binary) files are skipped automatically, as are noisy directories (`.git`,
+  `node_modules`, `venv`, `build`, …).
 
 ## Status
 
