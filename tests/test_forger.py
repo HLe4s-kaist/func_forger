@@ -20,7 +20,7 @@ from forger.input import InputKind, classify, normalize
 from forger.library import write_module
 from forger.manifest import Manifest, ManifestEntry
 from forger.retrieve import retrieve, search_library
-from forger.agent import forge_documented
+from forger.agent import forge_documented, _format_lookup
 from forger.spec import FuncSpec, ModuleSpec
 
 
@@ -384,6 +384,44 @@ def test_forge_seeds_all_small_library():
     # Both functions are textually unrelated to "add", yet must be seeded.
     assert "parse_csv" in captured["msg"]
     assert "multiply" in captured["msg"]
+
+
+def test_format_lookup_returns_exact_signature():
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="add", target_language="python", signature="add(a: int, b: int) -> int",
+        params=[{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+        return_type="int", description="sum", doc="# add: returns a+b", file_path="python/a.py"))
+    out = _format_lookup("add", m, "python")
+    assert "signature: add(a: int, b: int) -> int" in out
+    assert "returns: int" in out
+    assert "not found" in _format_lookup("does_not_exist", m, "python")
+
+
+def test_agent_uses_lookup_then_calls_correctly():
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="add", target_language="python", signature="add(a: int, b: int) -> int",
+        params=[{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+        return_type="int", description="sum two ints", doc="# add: returns a+b", file_path="python/a.py"))
+    captured = []
+    responses = iter([
+        "Let me look up add first.\nLOOKUP: add\n",
+        "```python\ndef inc(x):\n    return add(x, 1)\n```\n",
+    ])
+
+    class LookupLLM:
+        def complete(self, system, messages, *, model=None):
+            captured.append(messages)
+            return next(responses)
+
+    r = forge_documented("def inc(x): # use add to add 1", "python", m, LookupLLM())
+    # The LOOKUP result (with the exact signature) was fed back to the agent.
+    assert "add(a: int, b: int) -> int" in captured[-1][-1]["content"]
+    assert "add(x, 1)" in r.code          # correct arity/order from the lookup
+    assert r.used_names == ["add"]
 
 
 # -- standalone runner -----------------------------------------------------

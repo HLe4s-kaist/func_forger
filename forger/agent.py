@@ -49,24 +49,27 @@ and why.
 Write specific, searchable prose -- use the words someone would type to find \
 this function again. Add concise inline comments on non-obvious lines.
 
-You have ONE tool. To search the library, write a line starting with \
-`SEARCH:` followed by a free-text query, for example:
+BEFORE writing any code, you MUST check the library for functions you can reuse.
+This is mandatory, not optional. You have two tools, each written as its own line:
+- `LOOKUP: <name>` -- get the EXACT signature, params, return type, and doc of a
+  specific function. Use this whenever the user references a function by name, and
+  before you call ANY function whose exact signature is not already in front of you.
+- `SEARCH: <query>` -- find functions by purpose (free text), e.g.
     SEARCH: sum two integers
-You will receive the matching functions. Emit as many SEARCH: lines as you need \
-(zero or more) BEFORE writing code. Decide for yourself whether a search helps.
+You will receive the results. Run as many LOOKUP/SEARCH lines as you need, THEN
+write the code. NEVER call a library function whose exact signature you have not
+seen in a LOOKUP/SEARCH result or the available list -- if unsure, LOOKUP it first.
 
 When ready, output the COMPLETE implemented module in ONE fenced code block.
 - Implement exactly the skeleton's functions, keeping their signatures.
-- REUSE IS STRONGLY PREFERRED. The prompt lists available library functions; \
-if ANY of them can provide part of the logic, CALL it (importing it correctly \
-for the target language) instead of reimplementing that logic. Build new \
-functions by composing existing ones wherever you can. You may still run extra \
-SEARCH queries for anything not yet listed. NEVER invent or call a library \
-function that did not appear in the available list or in your search results.
-- When you CALL a library function, use its signature EXACTLY as listed -- the \
-same argument ORDER, TYPES, and COUNT. Never guess a signature. If a function \
-you want to reuse is not in the available list, run a SEARCH for it first \
-rather than calling it from memory.
+- REUSE IS STRONGLY PREFERRED. If ANY listed/looked-up function can provide part
+  of the logic, CALL it (importing it correctly for the target language) instead
+  of reimplementing. Build new functions by composing existing ones wherever you
+  can. NEVER invent or call a library function that did not appear in a LOOKUP/
+  SEARCH result or the available list.
+- When you CALL a library function, copy its signature EXACTLY -- the same \
+argument ORDER, TYPES, and COUNT, taken from a LOOKUP/SEARCH result or the \
+available list. Never guess.
 - Include any imports the module needs.
 - After any SEARCH: lines, output ONLY the code block.
 """
@@ -107,6 +110,38 @@ def _format_results(query: str, hits: list[ManifestEntry]) -> str:
         lines.append(f"    defined in: {entry.file_path}")
         if entry.doc:
             lines.append("    doc: " + entry.doc.replace("\n", "\n    "))
+    return "\n".join(lines)
+
+
+_LOOKUP_RE = re.compile(r"^\s*LOOKUP:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
+
+
+def _parse_lookups(raw: str) -> list[str]:
+    return [m.group(1).strip() for m in _LOOKUP_RE.finditer(raw)]
+
+
+def _format_lookup(name: str, manifest: Manifest, language: str) -> str:
+    """Exact info for a named function -- the authoritative calling convention."""
+    target = name.strip()
+    entry = manifest.get(language, target)
+    if entry is None:
+        candidates = [
+            e
+            for e in manifest.all()
+            if e.target_language == language and target.lower() in e.name.lower()
+        ]
+        entry = candidates[0] if candidates else None
+    if entry is None:
+        return f"LOOKUP {target!r}: (not found in the library)"
+    lines = [f"LOOKUP {target!r}:", f"  signature: {entry.signature}"]
+    if entry.params:
+        params = ", ".join(f"{p.get('name', '')}: {p.get('type', '')}" for p in entry.params)
+        lines.append(f"  params: {params}")
+    if entry.return_type:
+        lines.append(f"  returns: {entry.return_type}")
+    lines.append(f"  defined in: {entry.file_path}")
+    if entry.doc:
+        lines.append("  doc: " + entry.doc.replace("\n", "\n  "))
     return "\n".join(lines)
 
 
@@ -180,9 +215,10 @@ def forge_documented(
         raw = llm.complete(AGENT_SYSTEM, messages)
         raw_turns.append(raw)
         new_searches = _parse_searches(raw)
+        new_lookups = _parse_lookups(raw)
         code = extract_code_block(raw)
         if on_turn:
-            on_turn(raw, new_searches, code)
+            on_turn(raw, new_searches + new_lookups, code)
 
         if code:
             known, unknown = _used_names(code, manifest, language)
@@ -195,17 +231,20 @@ def forge_documented(
             result._unknown_deps = unknown  # type: ignore[attr-defined]
             return result
 
-        if new_searches:
+        if new_searches or new_lookups:
             all_searches.extend(new_searches)
             blocks = [
                 _format_results(q, search_library(q, manifest, language))
                 for q in new_searches
             ]
+            blocks.extend(
+                _format_lookup(name, manifest, language) for name in new_lookups
+            )
             messages.append({"role": "assistant", "content": raw})
             messages.append(
                 {
                     "role": "user",
-                    "content": "Library search results:\n\n"
+                    "content": "Library lookup results:\n\n"
                     + "\n\n".join(blocks)
                     + "\n\nNow write the implemented module in a single fenced code block.",
                 }
