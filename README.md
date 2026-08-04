@@ -1,5 +1,7 @@
 # Func-Forger
 
+> Languages: **English** · [한국어](README.ko.md) · [中文](README.zh.md) · [日本語](README.ja.md) — English is the canonical version.
+
 > **The idea.** Func-Forger goes beyond handing everything to an LLM agent. It
 > uses the LLM to accelerate the whole coding workflow while *reducing* the
 > inferential burden placed on the model — so the human keeps the initiative
