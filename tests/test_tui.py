@@ -181,6 +181,33 @@ def test_backend_apply_rebuilds_provider():
     asyncio.run(run())
 
 
+def test_ctrl_p_approves_in_review():
+    async def run():
+        cfg = _config()
+        app = ForgeApp(cfg)
+        assert app.ENABLE_COMMAND_PALETTE is False  # command palette must be off
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.llm = FakeLLM(
+                json.dumps(
+                    {"language": "python", "module_name": "m", "category": "misc",
+                     "functions": [{"name": "f", "params": [], "return_type": None,
+                                    "description": "x"}]}
+                ),
+                "```python\ndef f():\n    return 1\n```\n",
+            )
+            app.query_one("#editor").text = "def f(): ..."
+            app.action_forge()
+            while app.state != "review":
+                await pilot.pause(0.02)
+            await pilot.press("ctrl+p")  # must approve, not open a palette
+            await pilot.pause(0.05)
+            assert app.manifest.get("python", "f") is not None
+            assert app.state == "entry"
+
+    asyncio.run(run())
+
+
 def test_forge_via_ctrl_g_keybinding_through_vim():
     async def run():
         cfg = _config()

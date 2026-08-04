@@ -183,6 +183,10 @@ class ForgeApp(App):
     #backend_box Select { height: 1; }
     """
 
+    # Textual hardcodes the command palette on ctrl+p; Func-Forger doesn't use
+    # the palette, so disable it to free ctrl+p for "approve".
+    ENABLE_COMMAND_PALETTE = False
+
     BINDINGS = [
         Binding("ctrl+g", "forge", "Forge"),
         Binding("ctrl+p", "approve", "Approve"),
