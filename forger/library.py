@@ -59,13 +59,6 @@ def _signature(name: str, params: list[tuple[str, str]], return_type: str | None
     return f"{name}({params_str}){ret}"
 
 
-_DEF_WORDS = (
-    r"(?:def|fn|func|function|pub|public|private|protected|static|void|int|"
-    r"float|double|char|long|short|auto|const|let|var|impl|inline|unsigned|"
-    r"signed|size_t|string|bool)"
-)
-
-
 def _extract_doc(code: str, name: str) -> str:
     """Best-effort extraction of the rustdoc-style block above a function.
 

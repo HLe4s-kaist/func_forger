@@ -362,6 +362,26 @@ def test_search_camelcase_identifier_split():
 # -- agentic forge seeding -------------------------------------------------
 
 
+def test_seed_includes_type_definitions():
+    """The agent sees types/resources alongside functions (labeled with kind)."""
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="Point", target_language="c", kind="type",
+        signature="struct Point { float x; float y; }", description="2D point",
+        file_path="c/geo/point.c"))
+    captured = {}
+
+    class SeedTypeLLM:
+        def complete(self, system, messages, *, model=None):
+            captured["msg"] = messages[0]["content"]
+            return "```c\nfloat point_x(struct Point* p) { return p->x; }\n```\n"
+
+    forge_documented("float point_x(struct Point* p);", "c", m, SeedTypeLLM())
+    assert "[type]" in captured["msg"]
+    assert "struct Point" in captured["msg"]
+
+
 def test_forge_seeds_all_small_library():
     """A small library seeds EVERY same-language function so the agent always
     sees each one's exact signature (no search miss -> no wrong call)."""
