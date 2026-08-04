@@ -36,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--embed",
         action="store_true",
-        help="enable semantic search with defaults (auto-installs fastembed)",
+        help="enable semantic search (on by default; installed via pip install -e .)",
     )
     parser.add_argument(
         "--no-embed",
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> None:
     if ns.embed_model:
         config.embed_model = ns.embed_model
     if ns.embed and not config.embed_provider:
-        config.embed_provider = "fastembed"  # easy on-ramp: one flag, auto-install
+        config.embed_provider = "fastembed"  # enable semantic search explicitly
     if ns.no_embed:
         config.embed_provider = "none"
 

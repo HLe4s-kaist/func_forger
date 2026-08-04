@@ -51,7 +51,7 @@ _EXCLUDE_DIRS = {
 def _read_source(path: Path) -> str | None:
     """Read a source file as text with encoding detection.
 
-    Order: BOM → UTF-8 strict → charset-normalizer (auto-installed, handles
+    Order: BOM → UTF-8 strict → charset-normalizer (handles
     UTF-16, GBK, Shift-JIS, EUC-KR, Big5, etc.). Returns None if binary.
     """
     try:
