@@ -28,6 +28,11 @@ codebase to the model. Func-Forger flips the division of labor:
 You stay in command of the codebase while the LLM accelerates the grind — and a
 local open-source model is enough; no cloud model required.
 
+**One directory is the whole library.** Point Func-Forger at a directory
+(`--library <dir>`, default `./library`). If it already contains source, the
+existing definitions are indexed automatically on first run; then everything you
+forge is added to that same directory and becomes reusable too.
+
 ## The interface (TUI)
 
 A two-pane terminal app:
@@ -48,7 +53,8 @@ A two-pane terminal app:
   code). The editor is vim-modal in place (`i` to type, `Esc` for commands);
   press `F3` to open the buffer in `$EDITOR` (vim) for a full modal session.
 - **Right sidebar** — live library **search**, the **definition list** (select
-  an entry to view its source), and a **file tree** grouped by language and role.
+  an entry to view its source), and a **file tree** of the directory grouped by
+  language and role.
 
 ### Keybindings
 
@@ -78,17 +84,17 @@ A two-pane terminal app:
 4. A spinner runs during generation, then the code is revealed with a
    skeleton→code animation.
 5. **Review** — approve, reject, hand-edit, or regenerate a selected range.
-   Approve writes the file into `library/<lang>/<category>/<module>.<ext>`,
-   indexes it, and refreshes the sidebar.
+   Approve writes the file into the directory and refreshes the sidebar.
 
 ## Search & reuse is the point
 
-Every definition's documentation is extracted into the manifest and searched
-over. The default search is dependency-free token overlap: identifiers are
-split (`double_sum`, `parseCSV` → words), generic stopwords are dropped, and the
-score weights the **name** above the **description** above the **doc**. So a
-query like `sum two integers` finds `add` even with no shared surface form —
-which is what lets `double_sum` reuse `add` automatically.
+Every definition's documentation is extracted into a `manifest.json` in the
+directory and searched over. The default search is dependency-free token
+overlap: identifiers are split (`double_sum`, `parseCSV` → words), generic
+stopwords are dropped, and the score weights the **name** above the
+**description** above the **doc**. So a query like `sum two integers` finds
+`add` even with no shared surface form — which is what lets `double_sum` reuse
+`add` automatically.
 
 **Optional semantic search.** Plug in a local embedding model for matches that
 token overlap misses. Use a vetted default, or any model you like:
@@ -101,32 +107,8 @@ forger --embed-provider sentence-transformers \
        --embed-model BAAI/bge-small-en-v1.5                # ...or any HF id / local path
 ```
 
-The model is downloaded and cached on first use by those libraries. When no
-embedder is configured, token search is used (no extra dependencies).
-
-## Work on an existing codebase
-
-Func-Forger works directly on whatever directory you point it at: it indexes the
-existing definitions there so they're reusable, and forges new ones into the same
-place. Just point `--library` at your project — on first run it auto-indexes the
-existing source (the analysis is done by the LLM, so it's language-agnostic and
-needs no per-language parser).
-
-```bash
-forger --library ./my_repo         # auto-indexes existing source on first run,
-                                   # then lets you forge new code that reuses it
-forger ingest ./my_repo            # force a full re-index (e.g. after big edits)
-```
-
-The index is a single `manifest.json` written into that directory.
-
-- **It modifies the directory.** Func-Forger is not read-only: it writes
-  `manifest.json` and adds newly forged files into your codebase. **Back up your
-  original first.**
-- **Cost & accuracy.** Indexing is *approximate* (the LLM may miss or
-  mis-describe some definitions) and costs one LLM call per source file. Noisy
-  directories (`.git`, `node_modules`, `venv`, `build`, `target`, …) and files
-  over 200 KB are skipped; `--max-files N` caps the run for large repositories.
+The model is downloaded and cached on first use. With no embedder configured,
+token search is used (no extra dependencies).
 
 ## Language-agnostic, and what it does *not* do
 
@@ -141,10 +123,9 @@ straightforward — and that validation is left to the human, by design.
 ## LLM backend & running
 
 ```bash
-pip install -e .            # installs anthropic, openai, textual
-forger                      # TUI (default)
-forger --repl               # legacy conversational REPL
-forger ingest ./my_repo     # index an existing repo (read-only)
+pip install -e .                 # installs anthropic, openai, textual
+forger                           # work in ./library (default)
+forger --library ./my_project    # work on an existing project (auto-indexed on first run)
 forger --provider openai-compat --base-url http://localhost:11434/v1 --model llama3.1
 ```
 
@@ -158,6 +139,15 @@ Provider, base URL, model, and API key are set via CLI flags, environment
 variables, or the in-app backend screen (`F4`). Credentials are read from the
 usual environment variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` /
 `OPENAI_API_KEY`, optional `*_BASE_URL`).
+
+**Two things to know about working on an existing project:**
+
+- Func-Forger **modifies the directory** it works in — it writes `manifest.json`
+  and adds newly forged files. **Back up your original first.**
+- Auto-indexing is *approximate* (the LLM may miss or mis-describe some
+  definitions) and costs one LLM call per source file. Noisy directories
+  (`.git`, `node_modules`, `venv`, `build`, …) and files over 200 KB are
+  skipped. To force a full re-index after big edits: `forger ingest <dir>`.
 
 ## Status
 
