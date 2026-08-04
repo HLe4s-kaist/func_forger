@@ -96,19 +96,19 @@ stopwords are dropped, and the score weights the **name** above the
 `add` even with no shared surface form — which is what lets `double_sum` reuse
 `add` automatically.
 
-**Optional semantic search.** Plug in a local embedding model for matches that
-token overlap misses. Use a vetted default, or any model you like:
+**Semantic search is on by default.** Func-Forger uses a small local embedding
+model (`BAAI/bge-small-en-v1.5`) for matches token search misses. On first use
+it auto-installs `fastembed` (ONNX-based, no torch) and downloads the model —
+nothing for you to configure.
+
+Use a different model, or turn it off:
 
 ```bash
-pip install -e ".[embeddings]"     # fastembed (ONNX-based, no torch)
-# or: pip install -e ".[sbert]"    # sentence-transformers
-forger --embed-provider fastembed                          # auto-downloads a default model
+forger --embed-model BAAI/bge-base-en-v1.5     # any fastembed-supported model
 forger --embed-provider sentence-transformers \
-       --embed-model BAAI/bge-small-en-v1.5                # ...or any HF id / local path
+       --embed-model sentence-transformers/all-MiniLM-L6-v2   # or use sentence-transformers
+forger --no-embed                              # token search only (no extra deps)
 ```
-
-The model is downloaded and cached on first use. With no embedder configured,
-token search is used (no extra dependencies).
 
 ## Language-agnostic, and what it does *not* do
 

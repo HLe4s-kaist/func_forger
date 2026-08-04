@@ -33,6 +33,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--embed-provider", help="semantic search: none | fastembed | sentence-transformers"
     )
     parser.add_argument("--embed-model", help="local embedding model name")
+    parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="enable semantic search with defaults (auto-installs fastembed)",
+    )
+    parser.add_argument(
+        "--no-embed",
+        action="store_true",
+        help="disable semantic search (use token search only)",
+    )
     return parser
 
 
@@ -54,6 +64,10 @@ def main(argv: list[str] | None = None) -> None:
         config.embed_provider = ns.embed_provider
     if ns.embed_model:
         config.embed_model = ns.embed_model
+    if ns.embed and not config.embed_provider:
+        config.embed_provider = "fastembed"  # easy on-ramp: one flag, auto-install
+    if ns.no_embed:
+        config.embed_provider = "none"
 
     if ns.repl:
         from forger.repl import REPL
@@ -61,22 +75,25 @@ def main(argv: list[str] | None = None) -> None:
         REPL(config).run()
         return
 
-    # TUI: re-index the directory on every startup (full rebuild) so the index
-    # always reflects the current source. Skipped when there's no source.
-    _startup_index(config)
+    # TUI: first-time integration — index the existing source only when there is
+    # no manifest yet. After that the manifest persists; re-indexing later is a
+    # deliberate action (delete manifest.json and relaunch).
+    _maybe_auto_ingest(config)
     from forger.tui import ForgeApp
 
     ForgeApp(config).run()
 
 
-def _startup_index(config: Config) -> None:
-    """Re-index the library directory from scratch on startup (keeps it fresh)."""
+def _maybe_auto_ingest(config: Config) -> None:
+    """One-time: index the library's existing source if no manifest exists yet."""
+    if config.manifest_path.exists():
+        return
     from forger.ingest import has_source_files, ingest
     from forger.llm import make_provider
 
     if not has_source_files(config.library_dir):
         return
-    print(f"Indexing {config.library_dir} (full re-index on startup)...")
+    print(f"No index yet at {config.manifest_path}; indexing existing source (one-time)...")
     ingest(
         config.library_dir,
         make_provider(config),

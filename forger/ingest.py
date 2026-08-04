@@ -12,9 +12,11 @@ one LLM call per source file.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from forger.input import _extract_json
+from forger.library import _extract_doc
 from forger.manifest import Manifest, ManifestEntry
 
 # File extension -> language. This is just file ROUTING (which files to scan);
@@ -100,6 +102,7 @@ def ingest(
         raise NotADirectoryError(f"{root} is not a directory")
     manifest = Manifest(root / "manifest.json")
     manifest.entries.clear()  # full rebuild each run
+    file_codes: dict[str, str] = {}  # rel path -> source, for doc/graph rebuild
 
     files = walk_source_files(root, max_files=max_files)
     defs_total = 0
@@ -113,6 +116,7 @@ def ingest(
             if on_progress:
                 on_progress(index, len(files), rel, 0)  # binary, skipped
             continue
+        file_codes[rel] = code
         try:
             data = _extract_json(
                 llm.complete(
@@ -138,6 +142,9 @@ def ingest(
                     kind=(definition.get("kind") or "function").strip().lower() or "function",
                     signature=definition.get("signature") or str(name),
                     description=definition.get("description") or "",
+                    # Re-extract the rustdoc/comment block from the actual source
+                    # so re-indexing preserves the rich docs (not just the one-liner).
+                    doc=_extract_doc(code, str(name)),
                     file_path=rel,
                 )
             )
@@ -146,5 +153,32 @@ def ingest(
         if on_progress:
             on_progress(index, len(files), rel, added)
 
+    # Rebuild the dependency graph from source so it survives re-indexing.
+    _rebuild_graph(manifest, file_codes)
+
     manifest.persist()
     return manifest, len(files), defs_total
+
+
+def _rebuild_graph(manifest: Manifest, file_codes: dict[str, str]) -> None:
+    """Recompute depends_on / imported_by by scanning each file's source."""
+    by_lang: dict[str, dict[str, str]] = {}
+    for entry in manifest.all():
+        by_lang.setdefault(entry.target_language, {})[entry.name] = entry.id
+
+    for entry in manifest.all():
+        code = file_codes.get(entry.file_path, "")
+        deps: list[str] = []
+        for name, dep_id in by_lang.get(entry.target_language, {}).items():
+            if name == entry.name:
+                continue
+            if re.search(rf"\b{re.escape(name)}\b", code):
+                deps.append(dep_id)
+        entry.depends_on = deps
+        entry.imported_by = []
+
+    for entry in manifest.all():
+        for dep_id in entry.depends_on:
+            dep = manifest.entries.get(dep_id)
+            if dep and entry.id not in dep.imported_by:
+                dep.imported_by.append(entry.id)

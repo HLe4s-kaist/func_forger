@@ -96,6 +96,6 @@ class Config:
             library_dir=Path(lib) if lib else Path("./library"),
             provider=prov,
             session_language=lang,
-            embed_provider=os.environ.get("FORGER_EMBED_PROVIDER"),
+            embed_provider=os.environ.get("FORGER_EMBED_PROVIDER", "fastembed"),
             embed_model=os.environ.get("FORGER_EMBED_MODEL"),
         )
