@@ -1,27 +1,36 @@
 # Func-Forger
 
-AI coding agents write code at a volume humans can't keep up with — and
-prompt-engineering or harness tricks can't validate the code itself; they only
-steer the generation. Func-Forger takes the opposite stance: **give the
-initiative back to the programmer, and use the LLM only as an accelerator**,
-following a human's bottom-up development intuition.
+> **The idea.** Func-Forger goes beyond handing everything to an LLM agent. It
+> uses the LLM to accelerate the whole coding workflow while *reducing* the
+> inferential burden placed on the model — so the human keeps the initiative
+> over the entire codebase, and cheaper open-source or lower-tier models can
+> drive the project effectively. It shines most in environments where **only
+> local models are available**.
 
-The human plays the architect: drafting only the *skeletons* of the functions
-they want (the bones + optional `//` direction comments). The LLM implements
-them, writes rustdoc-grade documentation, files them into a structured library,
-and — crucially — **reuses the functions already in that library when it builds
-new ones**. Small primitives are composed into larger ones, bottom-up.
+Most AI coding tools make the LLM responsible for *what* to build, *how* to
+structure it, and *how* to implement it — a heavy inferential load that only
+the strongest (and priciest) models carry well, and that quietly hands the
+shape of the codebase over to the model. Func-Forger flips the division of
+labor:
 
-> Philosophy: **the human decides what functions to build, bottom-up; the LLM
-> implements them, documents them, and structures the codebase.**
+- **The human holds the design.** You draft *skeletons* — the bones of every
+  top-level definition (functions, structs/classes, typedefs, macros, …) plus
+  optional direction comments — so *what* gets built and *how* the codebase is
+  organized stay your decisions, not the model's.
+- **The LLM only fills in well-specified bodies.** Implementation, not
+  architecture. That is a far smaller inferential task, so a weaker or cheaper
+  model is enough — and the output stays simple for a human to validate.
+- **Built work is reused, bottom-up.** Each implemented definition is documented
+  (rustdoc-grade), indexed, and filed into a growing library; new definitions
+  search that library and compose existing ones instead of being reinvented.
 
-## Works well even with open-source models
+The net effect: you stay in command of the codebase while the LLM accelerates
+the grind — and a locally-served open-source model is a first-class citizen,
+not a fallback.
 
-This workflow offloads most of the inferential burden from the LLM: the human
-supplies the skeleton and the design, and delegates only the implementation.
-Because the model never has to decide *what* to build or *how* to structure it
--- only how to fill in well-specified bodies -- Func-Forger stays genuinely
-useful even when all you have are open-source / self-hosted models.
+> Philosophy: **the human designs bottom-up; the LLM implements, documents, and
+> structures — and because the LLM only implements, even modest models suffice.**
+
 
 ## The interface (TUI)
 
