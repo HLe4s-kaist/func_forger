@@ -37,22 +37,28 @@ class ImplementedModule:
 
 
 def build_user_prompt(module: ModuleSpec, retrieved: list[ManifestEntry]) -> str:
-    lines = [f"Target language: {module.target_language}", "", "Functions to implement:"]
+    lines = [f"Target language: {module.target_language}", "", "Definitions to implement:"]
     for fn in module.definitions:
-        params = ", ".join(f"{n}: {t}" for n, t in fn.params)
-        ret = f" -> {fn.return_type}" if fn.return_type else ""
-        lines.append(f"- {fn.name}({params}){ret}")
+        if fn.kind == "function":
+            params = ", ".join(f"{n}: {t}" for n, t in fn.params)
+            ret = f" -> {fn.return_type}" if fn.return_type else ""
+            lines.append(f"- [function] {fn.name}({params}){ret}")
+        else:
+            head = f"- [{fn.kind}] {fn.name}"
+            if fn.signature:
+                head += f"  ::  {fn.signature}"
+            lines.append(head)
         if fn.description:
             lines.append(f"    {fn.description}")
 
     lines.append("")
     if retrieved:
-        lines.append("Available library functions (prefer reusing these):")
+        lines.append("Available library definitions (prefer reusing these):")
         for entry in retrieved:
-            lines.append(f"- {entry.signature}  -- {entry.description}")
+            lines.append(f"- [{entry.kind}] {entry.signature}  -- {entry.description}")
             lines.append(f"    defined in: {entry.file_path}")
     else:
-        lines.append("No library functions are available yet for this language.")
+        lines.append("No library definitions are available yet for this language.")
 
     return "\n".join(lines)
 
@@ -81,7 +87,7 @@ def parse(raw: str, module: ModuleSpec, known_names: set[str]) -> ImplementedMod
 
 
 def extract_code_block(raw: str) -> str:
-    match = re.search(r"```(?:[a-zA-Z0-9_+.-]*)?\n(.*?)```", raw, re.DOTALL)
+    match = re.search(r"```(?:[a-zA-Z0-9_+.\-#]*)?\n(.*?)```", raw, re.DOTALL)
     return match.group(1).strip() if match else ""
 
 

@@ -328,7 +328,10 @@ class ForgeApp(App):
             # role categories (library/<lang>/<category>/<file>) appear as branches.
             nodes: dict[tuple, object] = {(): lnode}
             for path in sorted(by_lang[lang]):
-                comps = path.split("/")
+                # file_path already begins with the language, so drop that prefix
+                # to avoid nesting the language twice under its own node.
+                rel = path[len(lang) + 1:] if path.startswith(lang + "/") else path
+                comps = rel.split("/")
                 cur: tuple = ()
                 for i, comp in enumerate(comps):
                     key = cur + (comp,)
@@ -349,7 +352,10 @@ class ForgeApp(App):
         ol = self.query_one("#funclist", OptionList)
         ol.clear_options()
         for entry in sorted(self.manifest.all(), key=lambda e: (e.target_language, e.name)):
-            hay = f"{entry.target_language} {entry.name} {entry.description} {entry.doc}".lower()
+            hay = (
+                f"{entry.target_language} {entry.kind} {entry.name} "
+                f"{entry.signature} {entry.description} {entry.doc}"
+            ).lower()
             if query and query not in hay:
                 continue
             label = f"{entry.target_language}:{entry.name} [{entry.kind}]"
@@ -381,11 +387,14 @@ class ForgeApp(App):
     # -- forging -----------------------------------------------------------
 
     def action_forge(self) -> None:
+        if self.state == State.FORGING:
+            return  # a forge is already running
         editor = self.query_one("#editor", TextArea)
         skeleton = editor.text
         if not skeleton.strip():
             self._set_status("(editor is empty — write a skeleton first)")
             return
+        self._saved_entry = None
         self._flash(self.query_one("#status", Static), "cyan")
         self._do_forge(skeleton)
 
@@ -408,7 +417,8 @@ class ForgeApp(App):
             self._last_module = module
             self.call_from_thread(self._set_language, module.target_language)
             result = forge_documented(
-                skeleton, module.target_language, self.manifest, self.llm, on_turn=on_turn
+                skeleton, module.target_language, self.manifest, self.llm,
+                on_turn=on_turn, own_names=set(module.names()),
             )
             self.call_from_thread(self._finish_forging, result)
         except Exception as exc:
@@ -418,6 +428,7 @@ class ForgeApp(App):
         self.language = lang
 
     def _begin_forging(self) -> None:
+        self._stop_spinner()
         self.state = State.FORGING
         self._forging_msg = "starting…"
         self._spin_i = 0
@@ -437,6 +448,9 @@ class ForgeApp(App):
         self._reveal_code(result.code)
 
     def _reveal_code(self, code: str) -> None:
+        if self._reveal_timer is not None:
+            self._reveal_timer.stop()
+            self._reveal_timer = None
         self._reveal_full = code
         # Morph from the current text (the skeleton) into the generated code,
         # so it visibly transforms top-to-bottom rather than appearing from blank.
@@ -447,17 +461,21 @@ class ForgeApp(App):
     def _reveal_tick(self) -> None:
         self._reveal_pos = min(self._reveal_pos + 28, len(self._reveal_full))
         new, skeleton, pos = self._reveal_full, self._reveal_start, self._reveal_pos
-        shown = new[:pos] + skeleton[pos:] if pos < len(skeleton) else new[:pos]
-        self.query_one("#editor", TextArea).text = shown
+        # Only blend in the skeleton tail while we're still inside the new code;
+        # once pos passes len(new) the new code is fully shown (no stale tail).
+        tail = skeleton[pos:] if pos < len(new) else ""
+        self.query_one("#editor", TextArea).text = new[:pos] + tail
         if self._reveal_pos >= len(self._reveal_full):
             self._reveal_timer.stop()
+            self._reveal_timer = None
             self._enter_review()
 
     def _enter_review(self) -> None:
         editor = self.query_one("#editor", TextArea)
         editor.read_only = True
         self.state = State.REVIEW
-        known, unknown = _used_names(editor.text, self.manifest, self.language)
+        own = set(self._last_module.names()) if self._last_module else set()
+        known, unknown = _used_names(editor.text, self.manifest, self.language, own)
         parts = ["review"]
         if known:
             parts.append(f"reuses {', '.join(known)}")
@@ -487,7 +505,7 @@ class ForgeApp(App):
         editor = self.query_one("#editor", TextArea)
         code = editor.text  # may be hand-edited
         language = self._last_module.target_language
-        known, _ = _used_names(code, self.manifest, language)
+        known, _ = _used_names(code, self.manifest, language, set(self._last_module.names()))
         implemented = ImplementedModule(code=code, used_names=known)
         result = write_module(self._last_module, implemented, self.config.library_dir, self.manifest)
         for entry in result.entries:
@@ -500,6 +518,7 @@ class ForgeApp(App):
         self._last_module = None
         self._last_result = None
         self._skeleton = ""
+        self._saved_entry = None
         self.state = State.ENTRY
         warn = f"  ⚠ verify: {', '.join(result.unknown_deps)}" if result.unknown_deps else ""
         self._set_status(
@@ -515,6 +534,7 @@ class ForgeApp(App):
         editor.text = self._skeleton
         self._last_module = None
         self._last_result = None
+        self._saved_entry = None
         self.state = State.ENTRY
         self._set_status("rejected — skeleton restored. Edit and [ctrl+g] Forge again.")
 
@@ -557,11 +577,22 @@ class ForgeApp(App):
 
     @work(thread=True, exclusive=True)
     def _run_regen(self, full: str, region: str, instruction: str) -> None:
+        lang = self._last_module.target_language if self._last_module else self.language
         try:
-            new_code = regen_range(full, region, instruction, self.language, self.llm)
+            new_code = regen_range(full, region, instruction, lang, self.llm)
             self.call_from_thread(self._apply_regen, new_code)
         except Exception as exc:
-            self.call_from_thread(self._forge_failed, str(exc))
+            self.call_from_thread(self._regen_failed, str(exc))
+
+    def _regen_failed(self, msg: str) -> None:
+        # Stay in REVIEW with the pre-regen code so it can still be approved.
+        self._stop_spinner()
+        editor = self.query_one("#editor", TextArea)
+        editor.read_only = True
+        self.state = State.REVIEW
+        self._set_status(
+            f"✗ regen failed: {msg}  —  [ctrl+p] approve current, or [ctrl+r] retry"
+        )
 
     def _apply_regen(self, new_code: str) -> None:
         self._stop_spinner()

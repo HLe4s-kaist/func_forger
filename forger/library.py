@@ -68,10 +68,14 @@ def _extract_doc(code: str, name: str) -> str:
     lines = code.splitlines()
     def_line = None
     for i, line in enumerate(lines):
-        # First line that mentions the definition name as a whole word. Works for
-        # any kind (function, struct, typedef, macro, ...) without per-language
-        # keyword knowledge.
-        if re.search(rf"\b{re.escape(name)}\b", line):
+        stripped = line.strip()
+        is_comment = (
+            not stripped
+            or stripped.startswith(("#", "//", "/*", "*/", "*", '"""', "'''"))
+        )
+        # First NON-COMMENT line that mentions the name as a whole word -- i.e.
+        # the actual definition line, not a mention inside a sibling's doc.
+        if not is_comment and re.search(rf"\b{re.escape(name)}\b", line):
             def_line = i
             break
 
@@ -163,6 +167,10 @@ def write_module(
     for entry in entries:
         for dep_id in entry.depends_on:
             dep = manifest.entries.get(dep_id)
+            if dep is None and dep_id.count(":") == 1:
+                # Tolerate legacy 2-part ids ("lang:name") from older libraries.
+                lng, nm = dep_id.split(":", 1)
+                dep = manifest.get(lng, nm)
             if dep and entry.id not in dep.imported_by:
                 dep.imported_by.append(entry.id)
 

@@ -77,7 +77,11 @@ class VimTextArea(TextArea):
             return
 
         if not (event.is_printable or event.key == "enter"):
-            return  # non-printable: defer to binding resolution (arrows, ctrl/f-keys)
+            # Non-printable (arrows, Ctrl/F-keys): cancel any pending two-key
+            # sequence (dd/::/gg) so e.g. d -> arrow -> d cannot fire `dd`,
+            # then defer to binding resolution.
+            self._pending = None
+            return
 
         event.prevent_default()
         event.stop()

@@ -92,7 +92,7 @@ class Manifest:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Manifest at {self.path} is corrupt and unreadable: {e}") from e
-        for d in data.get("functions", []):
+        for d in data.get("definitions") or data.get("functions") or []:
             entry = ManifestEntry.from_dict(d)
             self.entries[entry.id] = entry
 
@@ -121,7 +121,7 @@ class Manifest:
     def persist(self) -> None:
         """Atomically write the manifest (tmp file + ``os.replace``)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"version": 1, "functions": [e.to_dict() for e in self.entries.values()]}
+        data = {"version": 1, "definitions": [e.to_dict() for e in self.entries.values()]}
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

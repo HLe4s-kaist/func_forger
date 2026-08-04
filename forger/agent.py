@@ -131,13 +131,6 @@ def _format_lookup(name: str, manifest: Manifest, language: str) -> str:
     target = name.strip()
     entry = manifest.get(language, target)
     if entry is None:
-        candidates = [
-            e
-            for e in manifest.all()
-            if e.target_language == language and target.lower() in e.name.lower()
-        ]
-        entry = candidates[0] if candidates else None
-    if entry is None:
         return f"LOOKUP {target!r}: (not found in the library)"
     lines = [f"LOOKUP {target!r}:", f"  kind: {entry.kind}", f"  signature: {entry.signature}"]
     if entry.params:
@@ -151,23 +144,36 @@ def _format_lookup(name: str, manifest: Manifest, language: str) -> str:
     return "\n".join(lines)
 
 
-def _used_names(code: str, manifest: Manifest, language: str) -> tuple[list[str], list[str]]:
-    """Return (known_used, unknown_used) library names referenced in ``code``."""
+def _used_names(
+    code: str, manifest: Manifest, language: str, own_names: set[str] | None = None
+) -> tuple[list[str], list[str]]:
+    """Return (known_used, unknown_used) library names referenced in ``code``.
+
+    ``own_names`` are the names defined in this very module; they are excluded
+    from "unknown calls" so a function's own definition header (and sibling
+    definitions) are not flagged.
+    """
+    own_names = own_names or set()
     library_names = {e.name for e in manifest.all() if e.target_language == language}
     known = sorted(
         name for name in library_names if re.search(rf"\b{re.escape(name)}\b", code)
     )
     called = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", code))
     builtins_ignore = {
-        "if", "for", "while", "print", "return", "def", "len", "range", "str",
-        "int", "float", "list", "dict", "set", "sum", "min", "max", "abs",
-        "any", "all", "sorted", "map", "filter", "open", "type", "isinstance",
+        # control flow / python builtins
+        "if", "for", "while", "switch", "case", "return", "print", "def", "len",
+        "range", "str", "int", "float", "list", "dict", "set", "sum", "min",
+        "max", "abs", "any", "all", "sorted", "map", "filter", "open", "type",
+        "isinstance",
+        # common C stdlib (so they aren't flagged as unknown library calls)
+        "printf", "sprintf", "snprintf", "scanf", "puts", "putchar", "getchar",
+        "malloc", "calloc", "realloc", "free", "fopen", "fclose", "fread",
+        "fwrite", "fseek", "ftell", "memcpy", "memset", "strcpy", "strcmp",
+        "strlen", "assert", "exit", "atoi", "atof",
     }
     unknown: list[str] = []
     for name in sorted(called):
-        if name in library_names or name in builtins_ignore:
-            continue
-        if re.search(rf"\b(def|fn|func|function)\s+{re.escape(name)}\b", code):
+        if name in library_names or name in own_names or name in builtins_ignore:
             continue
         unknown.append(name)
     return known, unknown
@@ -180,6 +186,7 @@ def forge_documented(
     llm,
     max_turns: int = 6,
     on_turn=None,
+    own_names: set[str] | None = None,
 ) -> ForgeResult:
     """Run the agent to turn ``skeleton`` into a documented, implemented module.
 
@@ -227,7 +234,7 @@ def forge_documented(
             on_turn(raw, new_searches + new_lookups, code)
 
         if code:
-            known, unknown = _used_names(code, manifest, language)
+            known, unknown = _used_names(code, manifest, language, own_names)
             result = ForgeResult(
                 code=code,
                 used_names=known,
@@ -239,6 +246,7 @@ def forge_documented(
 
         if new_searches or new_lookups:
             all_searches.extend(new_searches)
+            all_searches.extend(f"LOOKUP:{n}" for n in new_lookups)
             blocks = [
                 _format_results(q, search_library(q, manifest, language))
                 for q in new_searches
