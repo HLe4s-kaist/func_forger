@@ -178,7 +178,9 @@ class ForgeApp(App):
     #filetree { height: 1fr; border: round $panel; }
     #sidebar > Label { background: $panel; padding: 0 1; }
     #sidebar > Input { height: 1; }
-    #instr_box, #lang_box { background: $panel; padding: 1 2; border: round $accent; }
+    #instr_box, #lang_box, #backend_box { background: $panel; padding: 1 2; border: round $accent; }
+    #backend_box { width: 64; height: auto; }
+    #backend_box Select { height: 1; }
     """
 
     BINDINGS = [
