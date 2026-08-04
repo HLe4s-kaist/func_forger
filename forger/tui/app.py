@@ -40,6 +40,7 @@ from forger.input import InputKind, normalize
 from forger.library import ext_for, write_module
 from forger.llm import make_provider
 from forger.manifest import Manifest
+from forger.tui.vim_editor import VimTextArea
 
 # Target language -> TextArea (tree-sitter) lexer name. Unsupported names are
 # guarded at call time, so an unknown language simply disables highlighting.
@@ -115,6 +116,38 @@ class LanguageScreen(ModalScreen[str]):
         self.dismiss(None)
 
 
+class BackendScreen(ModalScreen):
+    """Set the LLM backend (provider, base URL, model, key) without restarting."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("LLM backend"),
+            Input(self.config.provider or "", id="provider", placeholder="anthropic | openai-compat"),
+            Input(self.config.resolved_base_url() or "", id="base_url", placeholder="base URL"),
+            Input(self.config.model or "", id="model", placeholder="model id"),
+            Input("", id="key", placeholder="api key (blank = keep)"),
+            Static("[enter] apply   [esc] cancel"),
+            id="backend_box",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#provider", Input).focus()
+
+    @on(Input.Submitted)
+    def submitted(self, event: Input.Submitted) -> None:
+        values = {widget.id: widget.value for widget in self.query(Input)}
+        self.dismiss(values)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class ForgeApp(App):
     CSS = """
     Screen { layout: vertical; }
@@ -123,6 +156,7 @@ class ForgeApp(App):
     #sidebar { width: 1fr; height: 100%; border-left: round $accent;
                padding: 0 0 0 1; }
     #editor { height: 1fr; border: round $primary; }
+    #editor.vim-insert { border: round $success; }
     #status { height: 1; background: $boost; color: $text; padding: 0 1; }
     #funclist { height: 1fr; border: round $panel; }
     #filetree { height: 1fr; border: round $panel; }
@@ -142,6 +176,7 @@ class ForgeApp(App):
         Binding("ctrl+l", "focus_funcs", "Library"),
         Binding("f2", "set_language", "Language"),
         Binding("f3", "external_editor", "Vim/$EDITOR"),
+        Binding("f4", "backend", "Backend"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
 
@@ -158,6 +193,8 @@ class ForgeApp(App):
         self._last_result = None
         self._skeleton = ""
         self._saved_entry = None  # text saved when viewing a library function
+        self._vim_mode = "normal"
+        self._last_status_msg = ""
         self._forging_msg = ""
         self._spin_i = 0
         self._spin_timer = None
@@ -172,7 +209,7 @@ class ForgeApp(App):
         yield Header()
         with Horizontal():
             with Vertical(id="main"):
-                yield TextArea(id="editor")
+                yield VimTextArea(id="editor")
                 yield Static("", id="status")
             with Vertical(id="sidebar"):
                 yield Label("Library search")
@@ -195,12 +232,28 @@ class ForgeApp(App):
 
     def _entry_hint(self) -> str:
         return (
-            f"write a skeleton (bones + optional // direction comments), "
-            f"then [ctrl+g] Forge   ·   lang: {self.language}"
+            f"write a skeleton (press i to type, Esc for vim cmds), "
+            f"then [ctrl+g] Forge   ·   lang: {self.language}   ·   "
+            f"[f2] lang  [f4] backend  [f3] $EDITOR"
         )
 
     def _set_status(self, msg: str) -> None:
-        self.query_one("#status", Static).update(msg)
+        self._last_status_msg = msg
+        self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
+
+    @on(VimTextArea.ModeChanged)
+    def _on_vim_mode(self, message: VimTextArea.ModeChanged) -> None:
+        self._vim_mode = message.mode
+        self.query_one("#status", Static).update(
+            f"[{self._vim_mode.upper()}] {self._last_status_msg}"
+        )
+
+    @on(VimTextArea.VimCommand)
+    def _on_vim_command(self, message: VimTextArea.VimCommand) -> None:
+        if message.command == "approve":
+            self.action_approve()
+        elif message.command == "reject":
+            self.action_reject()
 
     def _set_editor_language(self, lang: str) -> None:
         try:
@@ -508,6 +561,33 @@ class ForgeApp(App):
         if lang:
             self.language = lang
             self._set_status(f"language = {lang}  ·  " + self._entry_hint())
+
+    def action_backend(self) -> None:
+        self.push_screen(BackendScreen(self.config), self._on_backend)
+
+    def _on_backend(self, values) -> None:
+        if not values:
+            return
+        provider = (values.get("provider") or "").strip()
+        base_url = (values.get("base_url") or "").strip()
+        model = (values.get("model") or "").strip()
+        key = values.get("key") or ""
+        if provider:
+            self.config.provider = provider
+        if base_url:
+            self.config.base_url = base_url
+        if model:
+            self.config.model = model
+        if key:
+            self.config.api_key = key
+        self._rebuild_llm()
+        self.sub_title = (
+            f"provider: {self.config.provider} · model: {self.config.resolved_model()}"
+        )
+        self._set_status(
+            f"backend = {self.config.provider} / {self.config.resolved_model()} "
+            f"/ {self.config.resolved_base_url() or '(default)'}"
+        )
 
     def action_external_editor(self) -> None:
         """Open the current buffer in ``$EDITOR`` (vim by default) and load it back.

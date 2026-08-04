@@ -134,6 +134,54 @@ def test_external_editor_does_not_crash_headless():
     asyncio.run(run())
 
 
+def test_vim_modal_insert_and_delete_line():
+    async def run():
+        cfg = _config()
+        app = ForgeApp(cfg)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            editor = app.query_one("#editor")
+            editor.focus()
+            assert editor.vim_mode == "normal"
+            await pilot.press("i")                 # enter INSERT
+            assert editor.vim_mode == "insert"
+            await pilot.press("a", "b", "c")       # type
+            await pilot.press("escape")            # back to NORMAL
+            assert editor.text == "abc", editor.text
+            assert editor.vim_mode == "normal"
+            await pilot.press("d", "d")            # dd -> delete line
+            assert editor.text == "", editor.text
+
+    asyncio.run(run())
+
+
+def test_forge_via_ctrl_g_keybinding_through_vim():
+    async def run():
+        cfg = _config()
+        app = ForgeApp(cfg)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.llm = FakeLLM(
+                json.dumps(
+                    {"language": "python", "module_name": "arith", "category": "arithmetic",
+                     "functions": [{"name": "add", "params": [["a", "int"], ["b", "int"]],
+                                    "return_type": "int", "description": "sum"}]}
+                ),
+                "```python\ndef add(a, b):\n    return a + b\n```\n",
+            )
+            editor = app.query_one("#editor")
+            editor.focus()
+            editor.text = "def add(a, b): ..."
+            await pilot.press("ctrl+g")  # app binding must fire even with vim editor focused
+            for _ in range(300):
+                await pilot.pause(0.02)
+                if app.state == "review":
+                    break
+            assert app.state == "review", app.state
+
+    asyncio.run(run())
+
+
 def _run_all() -> int:
     tests = [
         (n, fn) for n, fn in sorted(globals().items())
