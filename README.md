@@ -97,9 +97,9 @@ stopwords are dropped, and the score weights the **name** above the
 `add` automatically.
 
 **Semantic search is on by default.** Func-Forger uses a small local embedding
-model (`BAAI/bge-small-en-v1.5`) for matches token search misses. On first use
-it auto-installs `fastembed` (ONNX-based, no torch) and downloads the model —
-nothing for you to configure.
+model (`BAAI/bge-small-en-v1.5`) for matches token search misses. `fastembed`
+(ONNX-based, no torch) is installed by `pip install -e .`; the model downloads
+on first search. Use `--no-embed` for token search only.
 
 Use a different model, or turn it off:
 
@@ -123,7 +123,7 @@ straightforward — and that validation is left to the human, by design.
 ## LLM backend & running
 
 ```bash
-pip install -e .                 # installs anthropic, openai, textual
+pip install -e .                 # installs anthropic, openai, textual, fastembed
 forger                           # work in ./library (default); embeddings on by default
 forger --library ./my_project    # work on an existing project (indexed once on first run)
 forger --provider openai-compat --base-url http://localhost:11434/v1 --model llama3.1

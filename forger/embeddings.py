@@ -53,37 +53,10 @@ class NullEmbedder:
         raise RuntimeError("No embedder configured.")
 
 
-def _ensure_package(package: str) -> bool:
-    """Import ``package``; if missing, auto-install it (one-time). Returns True
-    if the package is importable afterward. This keeps embeddings zero-burden for
-    the user -- no manual `pip install` step."""
-    import importlib
-    import subprocess
-    import sys
-
-    try:
-        importlib.import_module(package)
-        return True
-    except ImportError:
-        pass
-    print(f"Installing {package} (one-time)...")
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-q", package],
-            check=True,
-        )
-        importlib.import_module(package)
-        return True
-    except Exception:
-        return False
-
-
 class _FastEmbedBackend:
     """Backend using `fastembed` (ONNX-based, no torch)."""
 
     def __init__(self, model_name: str) -> None:
-        if not _ensure_package("fastembed"):
-            raise RuntimeError("fastembed could not be installed")
         from fastembed import TextEmbedding
 
         self._model = TextEmbedding(model_name=model_name)
@@ -96,8 +69,6 @@ class _SentenceTransformersBackend:
     """Backend using `sentence-transformers` (torch-based)."""
 
     def __init__(self, model_name: str) -> None:
-        if not _ensure_package("sentence_transformers"):
-            raise RuntimeError("sentence-transformers could not be installed")
         from sentence_transformers import SentenceTransformer
 
         self._model = SentenceTransformer(model_name)

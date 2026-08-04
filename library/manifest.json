@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "definitions": [
+    {
+      "id": "c:function:read_raw_byte_from_file",
+      "name": "read_raw_byte_from_file",
+      "target_language": "c",
+      "signature": "read_raw_byte_from_file(void * file_name, int idx, char * buf, int len) -> int",
+      "params": [
+        {
+          "name": "file_name",
+          "type": "void *"
+        },
+        {
+          "name": "idx",
+          "type": "int"
+        },
+        {
+          "name": "buf",
+          "type": "char *"
+        },
+        {
+          "name": "len",
+          "type": "int"
+        }
+      ],
+      "return_type": "int",
+      "description": "Reads up to len bytes from a file starting at idx into the provided buffer.",
+      "doc": "// Reads raw bytes from a file starting at a specified offset.\n//\n// Arguments:\n// file_name (void *): A pointer to a null-terminated string containing the path to the target file.\n// idx (int): The byte offset from the start of the file where reading should begin.\n// buf (char *): A pointer to the destination buffer where the read bytes will be stored.\n// len (int): The maximum number of bytes to be read from the file.\n//\n// Returns:\n// The number of bytes successfully read from the file.\n//\n// Behavior:\n// 1. The `file_name` pointer is cast to a `const char *` to access the file path string.\n// 2. The file is opened in binary read mode (\"rb\") using the standard `fopen` function.\n// 3. If the file cannot be opened, the function returns 0.\n// 4. The file pointer is moved to the position specified by `idx` from the start of the file using `fseek` with the `SEEK_SET` flag.\n// 5. If the seek operation fails, the file is closed and the function returns 0.\n// 6. Up to `len` bytes are read from the current file position into `buf` using the `fread` function.\n// 7. The file is closed using `fclose`.\n// 8. The number of bytes actually read by `fread` is returned as an integer.",
+      "kind": "function",
+      "file_path": "c/io/file_io.c",
+      "depends_on": [],
+      "imported_by": [],
+      "created_at": "2026-08-04T07:55:34.433828+00:00"
+    }
+  ]
+}

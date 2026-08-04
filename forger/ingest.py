@@ -77,20 +77,11 @@ def _read_source(path: Path) -> str | None:
     except UnicodeDecodeError:
         pass
 
-    # Non-UTF-8: use charset detection (auto-installed, lightweight pure-Python).
+    # Non-UTF-8: charset detection (charset-normalizer is a core dependency).
     try:
         from charset_normalizer import from_bytes
     except ImportError:
-        import subprocess
-        import sys
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-q", "charset-normalizer"],
-                check=True, timeout=60,
-            )
-            from charset_normalizer import from_bytes
-        except Exception:
-            return None
+        return None
 
     result = from_bytes(raw).best()
     return str(result) if result else None
