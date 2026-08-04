@@ -112,3 +112,14 @@ Credentials are read from the usual environment variables (`ANTHROPIC_API_KEY` /
 ## Status
 
 Early / in active design.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Disclaimer
+
+This project was developed using Claude Code powered by GLM-5.2 and has not been
+thoroughly reviewed by a human developer. You are free to use it, but the author
+assumes no responsibility for any problems that may arise from its use.
+
