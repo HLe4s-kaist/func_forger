@@ -29,7 +29,7 @@ def _score(candidate: ManifestEntry, spec: FuncSpec) -> float:
         + [f"{n} {t}" for n, t in spec.params]
     )
     cand_blob = " ".join(
-        [candidate.name, candidate.description, candidate.signature, candidate.return_type or ""]
+        [candidate.name, candidate.description, candidate.doc, candidate.signature, candidate.return_type or ""]
         + [f"{p.get('name', '')} {p.get('type', '')}" for p in candidate.params]
     )
     spec_tokens = _tokens(spec_blob)
@@ -56,6 +56,41 @@ def _score(candidate: ManifestEntry, spec: FuncSpec) -> float:
     type_overlap = len(spec_types & cand_types) / max(1, len(spec_types | cand_types))
 
     return name_hit + overlap + type_overlap
+
+
+def search_library(
+    query: str, manifest: Manifest, language: str | None = None, top_k: int = 8
+) -> list[ManifestEntry]:
+    """Free-text search over the library, used by the agent's search tool.
+
+    Scores same-language entries by token overlap with the query (plus a strong
+    name-substring bonus). When ``language`` is given, results are restricted to
+    that language so the agent only sees functions it can actually call.
+    """
+    query_tokens = _tokens(query)
+    if not query_tokens:
+        return []
+    query_lower = query.lower()
+
+    scored: list[tuple[ManifestEntry, float]] = []
+    for entry in manifest.all():
+        if language and entry.target_language != language:
+            continue
+        entry_tokens = _tokens(
+            " ".join(
+                [entry.name, entry.description, entry.doc, entry.signature, entry.return_type or ""]
+            )
+        )
+        if not entry_tokens:
+            continue
+        score = len(query_tokens & entry_tokens) / len(query_tokens | entry_tokens)
+        if entry.name.lower() in query_lower or query_lower in entry.name.lower():
+            score += 1.0
+        if score > 0:
+            scored.append((entry, score))
+
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    return [entry for entry, _ in scored[:top_k]]
 
 
 def retrieve(spec: FuncSpec, manifest: Manifest, top_k: int = 8) -> list[ManifestEntry]:

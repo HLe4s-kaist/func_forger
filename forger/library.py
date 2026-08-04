@@ -59,6 +59,60 @@ def _signature(name: str, params: list[tuple[str, str]], return_type: str | None
     return f"{name}({params_str}){ret}"
 
 
+_DEF_WORDS = (
+    r"(?:def|fn|func|function|pub|public|private|protected|static|void|int|"
+    r"float|double|char|long|short|auto|const|let|var|impl|inline|unsigned|"
+    r"signed|size_t|string|bool)"
+)
+
+
+def _extract_doc(code: str, name: str) -> str:
+    """Best-effort extraction of the rustdoc-style block above a function.
+
+    Falls back to the whole module source so the search index always has rich,
+    searchable text even when the heuristic cannot pinpoint a block.
+    """
+    lines = code.splitlines()
+    def_line = None
+    for i, line in enumerate(lines):
+        if re.search(rf"\b{re.escape(name)}\s*\(", line) and re.search(
+            rf"\b{_DEF_WORDS}\b", line
+        ):
+            def_line = i
+            break
+
+    block: list[str] = []
+    if def_line is not None:
+        j = def_line - 1
+        while j >= 0:
+            stripped = lines[j].strip()
+            if not stripped:
+                break
+            if stripped.startswith(("#", "//", "/*", "*/", "*", '"""', "'''")):
+                block.append(lines[j])
+                j -= 1
+            else:
+                break
+        block.reverse()
+        # Python triple-quoted docstring immediately inside the body.
+        k = def_line + 1
+        if k < len(lines):
+            s = lines[k].strip()
+            if s.startswith(('"""', "'''")):
+                quote = s[:3]
+                block.append(lines[k])
+                if s.count(quote) < 2:
+                    k += 1
+                    while k < len(lines) and quote not in lines[k]:
+                        block.append(lines[k])
+                        k += 1
+                    if k < len(lines):
+                        block.append(lines[k])
+
+    doc = "\n".join(block).strip()
+    return doc or code.strip()
+
+
 def write_module(
     module: ModuleSpec,
     implemented: ImplementedModule,
@@ -99,6 +153,7 @@ def write_module(
                 signature=_signature(fn.name, fn.params, fn.return_type),
                 file_path=str(rel_path),
                 description=fn.description or "",
+                doc=_extract_doc(implemented.code, fn.name),
                 params=[{"name": n, "type": t} for n, t in fn.params],
                 return_type=fn.return_type,
                 depends_on=list(known_used_ids),

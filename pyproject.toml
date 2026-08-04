@@ -13,6 +13,7 @@ authors = [{ name = "Func-Forger" }]
 dependencies = [
     "anthropic>=0.40",
     "openai>=1.40",
+    "textual>=0.50",
 ]
 
 [project.optional-dependencies]

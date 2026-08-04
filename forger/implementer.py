@@ -65,7 +65,7 @@ def implement(module: ModuleSpec, retrieved: list[ManifestEntry], llm) -> str:
 
 def parse(raw: str, module: ModuleSpec, known_names: set[str]) -> ImplementedModule:
     """Extract the code block and the library function names it references."""
-    code = _extract_code_block(raw)
+    code = extract_code_block(raw)
     if not code and _looks_like_raw_code(raw):
         code = raw.strip()
     if not code:
@@ -80,7 +80,7 @@ def parse(raw: str, module: ModuleSpec, known_names: set[str]) -> ImplementedMod
     return ImplementedModule(code=code, used_names=used)
 
 
-def _extract_code_block(raw: str) -> str:
+def extract_code_block(raw: str) -> str:
     match = re.search(r"```(?:[a-zA-Z0-9_+.-]*)?\n(.*?)```", raw, re.DOTALL)
     return match.group(1).strip() if match else ""
 

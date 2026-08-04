@@ -1,8 +1,8 @@
 """Command-line entry point.
 
-Builds a :class:`~forger.config.Config` from the environment, applies CLI flag
-overrides, and starts the REPL. Configuration precedence everywhere is:
-explicit REPL value > CLI flag > environment variable > built-in default.
+Launches the two-pane TUI by default. ``--repl`` selects the legacy
+conversational REPL. Configuration precedence everywhere is: explicit REPL
+value > CLI flag > environment variable > built-in default.
 """
 
 from __future__ import annotations
@@ -11,20 +11,25 @@ import argparse
 from pathlib import Path
 
 from forger.config import Config, canonical_language
-from forger.repl import REPL
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="forger",
         description=(
-            "Human drafts function skeletons; an LLM implements them, stores "
-            "them in a library, and reuses them when building new ones."
+            "Human drafts function skeletons; an LLM implements them with "
+            "rustdoc-grade docs, stores them in a library, and reuses them "
+            "when building new ones."
         ),
+    )
+    parser.add_argument(
+        "--repl",
+        action="store_true",
+        help="use the legacy conversational REPL instead of the TUI",
     )
     parser.add_argument("--library", "-l", help="library directory (default: ./library)")
     parser.add_argument("--provider", help="LLM backend: anthropic | openai-compat")
-    parser.add_argument("--model", help="model id (e.g. claude-sonnet-4-6, gpt-4o-mini)")
+    parser.add_argument("--model", help="model id (e.g. glm-4.6, claude-sonnet-4-6, gpt-4o-mini)")
     parser.add_argument("--base-url", dest="base_url", help="API base URL")
     parser.add_argument("--lang", help="default target language for natural-language input")
     return parser
@@ -43,7 +48,15 @@ def main(argv: list[str] | None = None) -> None:
         config.base_url = args.base_url
     if args.lang:
         config.session_language = canonical_language(args.lang)
-    REPL(config).run()
+
+    if args.repl:
+        from forger.repl import REPL
+
+        REPL(config).run()
+    else:
+        from forger.tui import ForgeApp
+
+        ForgeApp(config).run()
 
 
 if __name__ == "__main__":
