@@ -155,6 +155,28 @@ def test_vim_modal_insert_and_delete_line():
     asyncio.run(run())
 
 
+def test_backend_apply_rebuilds_provider():
+    async def run():
+        from forger.llm import OpenAIProvider
+        cfg = _config()
+        app = ForgeApp(cfg)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app._on_backend({
+                "provider": "openai-compat",
+                "base_url": "http://localhost:8000/v1",
+                "model": "llama3.1",
+                "key": "x",
+            })
+            await pilot.pause(0.02)
+            assert app.config.provider == "openai-compat"
+            assert app.config.base_url == "http://localhost:8000/v1"
+            assert app.config.model == "llama3.1"
+            assert isinstance(app.llm, OpenAIProvider)  # rebuilt live
+
+    asyncio.run(run())
+
+
 def test_forge_via_ctrl_g_keybinding_through_vim():
     async def run():
         cfg = _config()

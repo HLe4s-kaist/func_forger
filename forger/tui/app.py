@@ -562,6 +562,12 @@ class ForgeApp(App):
             self.language = lang
             self._set_status(f"language = {lang}  ·  " + self._entry_hint())
 
+    def _rebuild_llm(self) -> None:
+        try:
+            self.llm = make_provider(self.config)
+        except Exception as exc:  # e.g. unknown provider string
+            self._set_status(f"provider rebuild failed: {exc}")
+
     def action_backend(self) -> None:
         self.push_screen(BackendScreen(self.config), self._on_backend)
 
