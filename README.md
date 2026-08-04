@@ -104,27 +104,27 @@ forger --embed-provider sentence-transformers \
 The model is downloaded and cached on first use by those libraries. When no
 embedder is configured, token search is used (no extra dependencies).
 
-## Apply to an existing project
+## Work on an existing codebase
 
-Index an existing codebase so its definitions become searchable and reusable,
-then forge new code that builds on them. The analysis is done by the LLM
-(language-agnostic — no per-language parser).
+Func-Forger works directly on whatever directory you point it at: it indexes the
+existing definitions there so they're reusable, and forges new ones into the same
+place. Just point `--library` at your project — on first run it auto-indexes the
+existing source (the analysis is done by the LLM, so it's language-agnostic and
+needs no per-language parser).
 
 ```bash
-forger ingest ./my_repo            # read-only: the LLM records every top-level
-                                   # definition (name, kind, signature) with a
-                                   # one-line searchable description
-forger --library ./my_repo         # now forge as usual; existing definitions are
-                                   # reused, and the sidebar tree mirrors the
-                                   # repository's own structure
+forger --library ./my_repo         # auto-indexes existing source on first run,
+                                   # then lets you forge new code that reuses it
+forger ingest ./my_repo            # force a full re-index (e.g. after big edits)
 ```
 
-- **Read-only.** Your repository is never modified. The index (a manifest) is
-  written *outside* it, in your current directory at `./forger-index/<repo>/`
-  (override with `--index <dir>` or `FORGER_INDEX_DIR`); run `forger` from the
-  same directory (or pass `--index`) so it finds the index.
-- **Cost & accuracy.** Ingestion is *approximate* — the LLM may miss or
-  mis-describe some definitions — and costs one LLM call per source file. Noisy
+The index is a single `manifest.json` written into that directory.
+
+- **It modifies the directory.** Func-Forger is not read-only: it writes
+  `manifest.json` and adds newly forged files into your codebase. **Back up your
+  original first.**
+- **Cost & accuracy.** Indexing is *approximate* (the LLM may miss or
+  mis-describe some definitions) and costs one LLM call per source file. Noisy
   directories (`.git`, `node_modules`, `venv`, `build`, `target`, …) and files
   over 200 KB are skipped; `--max-files N` caps the run for large repositories.
 

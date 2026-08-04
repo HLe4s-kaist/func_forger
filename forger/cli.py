@@ -1,8 +1,9 @@
 """Command-line entry point.
 
-Launches the two-pane TUI by default. ``--repl`` selects the legacy
-conversational REPL. Configuration precedence everywhere is: explicit REPL
-value > CLI flag > environment variable > built-in default.
+Launches the two-pane TUI by default (auto-indexing the library on first run).
+``--repl`` selects the legacy conversational REPL; ``forger ingest <dir>``
+forces a full re-index. Configuration precedence is: explicit REPL value >
+CLI flag > environment variable > built-in default.
 """
 
 from __future__ import annotations
@@ -18,30 +19,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="forger",
         description=(
-            "Human drafts function skeletons; an LLM implements them with "
-            "rustdoc-grade docs, stores them in a library, and reuses them "
-            "when building new ones."
+            "Human drafts skeletons; an LLM implements them with rustdoc-grade "
+            "docs, files them in a library, and reuses existing definitions."
         ),
     )
-    parser.add_argument(
-        "--repl",
-        action="store_true",
-        help="use the legacy conversational REPL instead of the TUI",
-    )
-    parser.add_argument("--library", "-l", help="library directory (default: ./library)")
+    parser.add_argument("--repl", action="store_true", help="legacy conversational REPL")
+    parser.add_argument("--library", "-l", help="library/codebase directory (default: ./library)")
     parser.add_argument("--provider", help="LLM backend: anthropic | openai-compat")
-    parser.add_argument("--model", help="model id (e.g. glm-4.6, claude-sonnet-4-6, gpt-4o-mini)")
+    parser.add_argument("--model", help="model id")
     parser.add_argument("--base-url", dest="base_url", help="API base URL")
-    parser.add_argument("--lang", help="default target language for natural-language input")
+    parser.add_argument("--lang", help="default target language")
     parser.add_argument(
-        "--embed-provider",
-        help="semantic search backend: none | fastembed | sentence-transformers",
+        "--embed-provider", help="semantic search: none | fastembed | sentence-transformers"
     )
     parser.add_argument("--embed-model", help="local embedding model name")
-    parser.add_argument(
-        "--index",
-        help="manifest/index directory (defaults to ./forger-index/<repo>/ in the cwd)",
-    )
     return parser
 
 
@@ -54,12 +45,6 @@ def main(argv: list[str] | None = None) -> None:
     config = Config.from_env()
     if ns.library:
         config.library_dir = Path(ns.library)
-        # If this repo was ingested, use its read-only index (kept outside the repo).
-        from forger.ingest import manifest_path_for
-        if manifest_path_for(ns.library, ns.index).exists():
-            config.manifest_override = manifest_path_for(ns.library, ns.index)
-    if ns.index:
-        config.manifest_override = Path(ns.index) / "manifest.json"
     if ns.provider:
         config.provider = ns.provider
     if ns.model:
@@ -77,24 +62,42 @@ def main(argv: list[str] | None = None) -> None:
         from forger.repl import REPL
 
         REPL(config).run()
-    else:
-        from forger.tui import ForgeApp
+        return
 
-        ForgeApp(config).run()
+    # TUI: auto-index the codebase on first run (no manifest yet + source present).
+    _maybe_auto_ingest(config)
+    from forger.tui import ForgeApp
+
+    ForgeApp(config).run()
+
+
+def _maybe_auto_ingest(config: Config) -> None:
+    """If the library has source files but no manifest yet, index them now."""
+    if config.manifest_path.exists():
+        return
+    from forger.ingest import has_source_files, ingest
+    from forger.llm import make_provider
+
+    if not has_source_files(config.library_dir):
+        return
+    print(f"No index yet at {config.manifest_path}; indexing existing source...")
+    ingest(
+        config.library_dir,
+        make_provider(config),
+        on_progress=lambda i, n, rel, added: print(f"  [{i}/{n}] {rel} (+{added})"),
+    )
 
 
 def _run_ingest(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         prog="forger ingest",
-        description="Index an existing repository into a Func-Forger library manifest.",
+        description="Index a codebase into its manifest (full rebuild).",
     )
-    parser.add_argument("repo_dir", help="path to the repository to index")
+    parser.add_argument("repo_dir", help="directory to index")
     parser.add_argument("--provider", help="LLM backend: anthropic | openai-compat")
     parser.add_argument("--model", help="model id")
     parser.add_argument("--base-url", dest="base_url", help="API base URL")
-    parser.add_argument("--lang", help="default target language (fallback)")
     parser.add_argument("--max-files", type=int, default=None, help="stop after this many files")
-    parser.add_argument("--index", help="where to write the index (defaults to ./forger-index/<repo>/)")
     ns = parser.parse_args(argv)
 
     config = Config.from_env()
@@ -104,10 +107,8 @@ def _run_ingest(argv: list[str]) -> None:
         config.model = ns.model
     if ns.base_url:
         config.base_url = ns.base_url
-    if ns.lang:
-        config.session_language = canonical_language(ns.lang)
 
-    from forger.ingest import ingest, manifest_path_for
+    from forger.ingest import ingest
     from forger.llm import make_provider
 
     llm = make_provider(config)
@@ -115,19 +116,9 @@ def _run_ingest(argv: list[str]) -> None:
     def progress(done: int, total: int, rel: str, added: int) -> None:
         print(f"  [{done}/{total}] {rel}  (+{added} definition{'s' if added != 1 else ''})")
 
-    manifest, files, defs = ingest(
-        ns.repo_dir, llm, max_files=ns.max_files, on_progress=progress,
-        index_override=ns.index,
-    )
-    print(
-        f"Indexed {files} file(s), {defs} definition(s) -> "
-        f"{manifest_path_for(ns.repo_dir, ns.index)}"
-    )
-    print("The repository was not modified. Now forge on it:  forger --library " + ns.repo_dir)
-
-
-if __name__ == "__main__":
-    main()
+    manifest, files, defs = ingest(ns.repo_dir, llm, max_files=ns.max_files, on_progress=progress)
+    print(f"Indexed {files} file(s), {defs} definition(s) -> {Path(ns.repo_dir) / 'manifest.json'}")
+    print("Now forge on it:  forger --library " + ns.repo_dir)
 
 
 if __name__ == "__main__":

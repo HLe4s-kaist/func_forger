@@ -417,9 +417,8 @@ def test_null_embedder_is_unavailable():
 # -- repo ingestion --------------------------------------------------------
 
 
-def test_ingest_is_readonly_and_indexes_real_paths():
-    os.environ["FORGER_INDEX_DIR"] = str(Path(tempfile.mkdtemp()) / "idx")
-    from forger.ingest import ingest, manifest_path_for
+def test_ingest_indexes_real_paths_into_the_library():
+    from forger.ingest import ingest
 
     root = Path(tempfile.mkdtemp())
     (root / "src").mkdir()
@@ -446,10 +445,8 @@ def test_ingest_is_readonly_and_indexes_real_paths():
     assert files == 2 and defs == 2
     assert manifest.get("python", "add").file_path == "src/add.py"
     assert manifest.get("c", "add").file_path == "src/math.c"
-    # The repository itself is never written to.
-    assert not (root / "manifest.json").exists()
-    # The index lives outside the repo (under FORGER_INDEX_DIR here).
-    assert manifest_path_for(root).exists()
+    # The manifest is written into the library directory itself.
+    assert (root / "manifest.json").exists()
 
 
 # -- agentic forge seeding -------------------------------------------------
