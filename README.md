@@ -29,8 +29,8 @@ You stay in command of the codebase while the LLM accelerates the grind — and 
 local open-source model is enough; no cloud model required.
 
 **One directory is the whole library.** Point Func-Forger at a directory
-(`--library <dir>`, default `./library`). If it already contains source, the
-existing definitions are indexed automatically on first run; then everything you
+(`--library <dir>`, default `./library`). On every startup it re-indexes the
+source already there (so the index always reflects your code); everything you
 forge is added to that same directory and becomes reusable too.
 
 ## The interface (TUI)
@@ -125,7 +125,7 @@ straightforward — and that validation is left to the human, by design.
 ```bash
 pip install -e .                 # installs anthropic, openai, textual
 forger                           # work in ./library (default)
-forger --library ./my_project    # work on an existing project (auto-indexed on first run)
+forger --library ./my_project    # work on an existing project (re-indexed on every startup)
 forger --provider openai-compat --base-url http://localhost:11434/v1 --model llama3.1
 ```
 
@@ -144,10 +144,12 @@ usual environment variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` /
 
 - Func-Forger **modifies the directory** it works in — it writes `manifest.json`
   and adds newly forged files. **Back up your original first.**
-- Auto-indexing is *approximate* (the LLM may miss or mis-describe some
-  definitions) and costs one LLM call per source file. Noisy directories
-  (`.git`, `node_modules`, `venv`, `build`, …) and files over 200 KB are
-  skipped. To force a full re-index after big edits: `forger ingest <dir>`.
+- It **re-indexes the directory on every startup** (full rebuild), so the index
+  always reflects your current source. Indexing is *approximate* (the LLM may
+  miss or mis-describe some definitions) and costs one LLM call per source file,
+  so a large project takes time on each launch. Non-text (binary) files are
+  skipped automatically, as are noisy directories (`.git`, `node_modules`,
+  `venv`, `build`, …).
 
 ## Status
 

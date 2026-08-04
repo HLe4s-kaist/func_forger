@@ -46,8 +46,6 @@ _EXCLUDE_DIRS = {
     ".idea", ".vscode", "site-packages",
 }
 
-_MAX_FILE_BYTES = 200_000
-
 INGEST_PROMPT = """\
 You inspect ONE source file and list its top-level DEFINITIONS for a code \
 library's index: functions, structs/classes/traits/enums, type aliases/typedefs, \
@@ -75,11 +73,6 @@ def walk_source_files(library_dir: Path, max_files: int | None = None) -> list[P
         if any(part in _EXCLUDE_DIRS for part in path.relative_to(library_dir).parts[:-1]):
             continue
         if language_for_file(path) is None:
-            continue
-        try:
-            if path.stat().st_size > _MAX_FILE_BYTES:
-                continue
-        except OSError:
             continue
         files.append(path)
         if max_files and len(files) >= max_files:
@@ -113,8 +106,14 @@ def ingest(
     for index, path in enumerate(files, start=1):
         rel = path.relative_to(root).as_posix()
         language = language_for_file(path) or "python"
+        # Text vs binary: only index files that decode cleanly as UTF-8.
         try:
-            code = path.read_text(encoding="utf-8", errors="ignore")
+            code = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            if on_progress:
+                on_progress(index, len(files), rel, 0)  # binary, skipped
+            continue
+        try:
             data = _extract_json(
                 llm.complete(
                     INGEST_PROMPT,
