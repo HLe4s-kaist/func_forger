@@ -19,7 +19,7 @@ from forger.implementer import ImplementedModule, parse
 from forger.input import InputKind, classify, normalize
 from forger.library import write_module
 from forger.manifest import Manifest, ManifestEntry
-from forger.retrieve import retrieve
+from forger.retrieve import retrieve, search_library
 from forger.spec import FuncSpec, ModuleSpec
 
 
@@ -297,6 +297,65 @@ def test_full_forge_pipeline():
 
     assert repl.manifest.get("python", "add") is not None
     assert (cfg.library_dir / "python" / "arith.py").read_text().strip() == "def add(a, b):\n    return a + b"
+
+
+# -- search (free-text) ----------------------------------------------------
+
+
+def _search_lib():
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="add", target_language="python", signature="add(a: int, b: int) -> int",
+        description="sum two integers", file_path="python/arith.py",
+        doc="# Sum two integers.\n# Behavior: returns the arithmetic sum of a and b.",
+    ))
+    m.upsert(ManifestEntry(
+        name="double_sum", target_language="python",
+        signature="double_sum(x: int, y: int) -> int", description="double the sum",
+        file_path="python/arith.py", doc="# Returns twice the sum, via add.",
+    ))
+    m.upsert(ManifestEntry(
+        name="capitalize", target_language="python",
+        signature="capitalize(s: str) -> str", description="uppercase the first letter",
+        file_path="python/strings.py", doc="# Capitalize a string.",
+    ))
+    m.upsert(ManifestEntry(
+        name="add", target_language="c", signature="int add(int, int)",
+        file_path="c/arith.c",
+    ))
+    return m
+
+
+def test_search_finds_add_for_sum_query():
+    hits = search_library("sum two integers", _search_lib(), "python")
+    assert hits and hits[0].name == "add"
+
+
+def test_search_finds_double_sum():
+    hits = search_library("double the sum", _search_lib(), "python")
+    assert hits and hits[0].name == "double_sum"
+
+
+def test_search_excludes_other_languages():
+    hits = search_library("add integers", _search_lib(), "python")
+    assert hits and all(e.target_language == "python" for e in hits)
+
+
+def test_search_empty_query_returns_empty():
+    assert search_library("   ", _search_lib(), "python") == []
+
+
+def test_search_camelcase_identifier_split():
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    m.upsert(ManifestEntry(
+        name="parseCSV", target_language="python", signature="parseCSV(s) -> list",
+        description="parse csv data", file_path="python/csv.py",
+        doc="# parse comma-separated values",
+    ))
+    hits = search_library("csv parsing", m, "python")
+    assert hits and hits[0].name == "parseCSV"
 
 
 # -- standalone runner -----------------------------------------------------

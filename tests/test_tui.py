@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 import traceback
 from pathlib import Path
@@ -116,6 +117,21 @@ def test_regen_range_keeps_rest():
     new_code = regen_range("def f():\n    return 1\n", "return 1", "return 2 instead", "python", llm)
     assert "def f" in new_code
     assert "2" in new_code
+
+
+def test_external_editor_does_not_crash_headless():
+    async def run():
+        os.environ["EDITOR"] = "true"
+        cfg = _config()
+        app = ForgeApp(cfg)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.query_one("#editor").text = "def f(): ..."
+            app.action_external_editor()  # suspend is unsupported in headless; must not crash
+            await pilot.pause(0.05)
+            assert app.state == "entry"
+
+    asyncio.run(run())
 
 
 def _run_all() -> int:

@@ -19,6 +19,11 @@ library, writes documented code with a typewriter reveal -> review ->
 
 from __future__ import annotations
 
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -32,7 +37,7 @@ from forger.agent import ForgeError, _used_names, forge_documented, regen_range
 from forger.config import Config, canonical_language
 from forger.implementer import ImplementedModule
 from forger.input import InputKind, normalize
-from forger.library import write_module
+from forger.library import ext_for, write_module
 from forger.llm import make_provider
 from forger.manifest import Manifest
 
@@ -136,6 +141,7 @@ class ForgeApp(App):
         Binding("ctrl+b", "back", "Back"),
         Binding("ctrl+l", "focus_funcs", "Library"),
         Binding("f2", "set_language", "Language"),
+        Binding("f3", "external_editor", "Vim/$EDITOR"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
 
@@ -157,6 +163,7 @@ class ForgeApp(App):
         self._spin_timer = None
         self._reveal_timer = None
         self._reveal_full = ""
+        self._reveal_start = ""
         self._reveal_pos = 0
 
     # -- layout ------------------------------------------------------------
@@ -221,9 +228,22 @@ class ForgeApp(App):
         for entry in self.manifest.all():
             by_lang.setdefault(entry.target_language, set()).add(entry.file_path)
         for lang in sorted(by_lang):
-            branch = tree.root.add(lang)
+            lnode = tree.root.add(lang)
+            # Build a nested tree from the slash-separated file paths so that
+            # role categories (library/<lang>/<category>/<file>) appear as branches.
+            nodes: dict[tuple, object] = {(): lnode}
             for path in sorted(by_lang[lang]):
-                branch.add_leaf(path)
+                comps = path.split("/")
+                cur: tuple = ()
+                for i, comp in enumerate(comps):
+                    key = cur + (comp,)
+                    if key not in nodes:
+                        parent = nodes[cur]
+                        nodes[key] = (
+                            parent.add_leaf(comp) if i == len(comps) - 1 else parent.add(comp)
+                        )
+                    cur = key
+            lnode.expand_all()
         tree.root.expand_all()
 
     @on(Input.Changed)
@@ -322,14 +342,17 @@ class ForgeApp(App):
 
     def _reveal_code(self, code: str) -> None:
         self._reveal_full = code
+        # Morph from the current text (the skeleton) into the generated code,
+        # so it visibly transforms top-to-bottom rather than appearing from blank.
+        self._reveal_start = self.query_one("#editor", TextArea).text
         self._reveal_pos = 0
-        editor = self.query_one("#editor", TextArea)
-        editor.text = ""
         self._reveal_timer = self.set_interval(0.02, self._reveal_tick)
 
     def _reveal_tick(self) -> None:
         self._reveal_pos = min(self._reveal_pos + 28, len(self._reveal_full))
-        self.query_one("#editor", TextArea).text = self._reveal_full[: self._reveal_pos]
+        new, skeleton, pos = self._reveal_full, self._reveal_start, self._reveal_pos
+        shown = new[:pos] + skeleton[pos:] if pos < len(skeleton) else new[:pos]
+        self.query_one("#editor", TextArea).text = shown
         if self._reveal_pos >= len(self._reveal_full):
             self._reveal_timer.stop()
             self._enter_review()
@@ -485,3 +508,38 @@ class ForgeApp(App):
         if lang:
             self.language = lang
             self._set_status(f"language = {lang}  ·  " + self._entry_hint())
+
+    def action_external_editor(self) -> None:
+        """Open the current buffer in ``$EDITOR`` (vim by default) and load it back.
+
+        Gives a true vim/emacs/etc. editing session on the skeleton or the
+        generated code under review. The app is suspended while the external
+        editor owns the terminal.
+        """
+        if self.state == State.FORGING:
+            return
+        editor_widget = self.query_one("#editor", TextArea)
+        fd, tmp_path = tempfile.mkstemp(suffix=ext_for(self.language), text=True)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(editor_widget.text)
+            command = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+            try:
+                with self.suspend():
+                    subprocess.call([command, tmp_path])
+            except Exception as exc:  # SuspendNotSupported, or the editor failed to launch
+                self._set_status(f"external editor unavailable: {exc}")
+                return
+            try:
+                editor_widget.text = Path(tmp_path).read_text(encoding="utf-8")
+            except OSError:
+                return
+            editor_widget.read_only = False
+            editor_widget.focus()
+            action = "[ctrl+p] approve" if self.state == State.REVIEW else "[ctrl+g] forge"
+            self._set_status(f"edited in $EDITOR — {action}")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass

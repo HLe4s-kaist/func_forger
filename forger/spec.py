@@ -34,6 +34,7 @@ class ModuleSpec:
     functions: list[FuncSpec] = field(default_factory=list)
     source: str = "code"  # "code" | "file" | "nl"
     module_name: str | None = None  # suggested file slug; None => derive later
+    category: str | None = None  # role bucket, e.g. "arithmetic", "strings", "io"
 
     def names(self) -> list[str]:
         return [f.name for f in self.functions]

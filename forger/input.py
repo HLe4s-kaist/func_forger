@@ -88,7 +88,8 @@ def normalize(text: str, kind: InputKind, language: str | None, llm) -> ModuleSp
 
 
 _JSON_SHAPE = (
-    '{"language": "...", "module_name": "snake_case_slug", '
+    '{"language": "...", "category": "arithmetic", '
+    '"module_name": "snake_case_slug", '
     '"functions": [{"name": "...", "params": [["a", "int"]], '
     '"return_type": "int", "description": "one line"}]}'
 )
@@ -97,7 +98,9 @@ _JSON_SHAPE = (
 def _normalize_code(code: str, source: str, language: str | None, llm) -> ModuleSpec:
     system = (
         "You parse source-code skeletons into structured function signatures. "
-        "Detect the programming language. For each function give: name, params "
+        "Detect the programming language. Give the module a short snake_case "
+        "``category`` describing its role (e.g. arithmetic, strings, io, "
+        "parsing, sorting, crypto, math). For each function give: name, params "
         "as [name, type] pairs, return_type (or null), and a one-line "
         "description. Respond with ONLY a JSON object of this shape:\n"
         + _JSON_SHAPE
@@ -120,7 +123,9 @@ def _normalize_nl(text: str, language: str | None, llm) -> ModuleSpec:
         )
     system = (
         "You design function signatures from a natural-language description, "
-        "producing one or more functions in the given target language. For each "
+        "producing one or more functions in the given target language. Give the "
+        "module a short snake_case ``category`` describing its role (e.g. "
+        "arithmetic, strings, io, parsing, sorting, crypto, math). For each "
         "function give: name, params as [name, type] pairs, return_type (or "
         "null), and a one-line description. Respond with ONLY a JSON object of "
         "this shape:\n" + _JSON_SHAPE
@@ -159,6 +164,7 @@ def _module_from_json(data: dict, source: str, fallback: str) -> ModuleSpec:
         functions=functions,
         source=source,
         module_name=data.get("module_name"),
+        category=(data.get("category") or "").strip().lower() or None,
     )
 
 

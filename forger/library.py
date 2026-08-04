@@ -128,7 +128,10 @@ def write_module(
     language = module.target_language
     base_name = module.module_name or module.functions[0].name
     slug = _slugify(base_name)
-    rel_path = Path(language) / f"{slug}{ext_for(language)}"
+    parts = [language]
+    if module.category:
+        parts.append(_slugify(module.category))
+    rel_path = Path(*parts) / f"{slug}{ext_for(language)}"
     abs_path = library_dir / rel_path
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     abs_path.write_text(implemented.code, encoding="utf-8")
