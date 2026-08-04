@@ -48,6 +48,54 @@ _EXCLUDE_DIRS = {
     ".idea", ".vscode", "site-packages",
 }
 
+def _read_source(path: Path) -> str | None:
+    """Read a source file as text with encoding detection.
+
+    Order: BOM → UTF-8 strict → charset-normalizer (auto-installed, handles
+    UTF-16, GBK, Shift-JIS, EUC-KR, Big5, etc.). Returns None if binary.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+
+    # BOM detection.
+    if raw.startswith(b"\xef\xbb\xbf"):  # UTF-8 BOM
+        try:
+            return raw[3:].decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):  # UTF-16 LE/BE BOM
+        try:
+            return raw.decode("utf-16")
+        except (UnicodeDecodeError, LookupError):
+            pass
+
+    # UTF-8 strict (the vast majority of modern source).
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+
+    # Non-UTF-8: use charset detection (auto-installed, lightweight pure-Python).
+    try:
+        from charset_normalizer import from_bytes
+    except ImportError:
+        import subprocess
+        import sys
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "charset-normalizer"],
+                check=True, timeout=60,
+            )
+            from charset_normalizer import from_bytes
+        except Exception:
+            return None
+
+    result = from_bytes(raw).best()
+    return str(result) if result else None
+
+
 INGEST_PROMPT = """\
 You inspect ONE source file and list its top-level DEFINITIONS for a code \
 library's index: functions, structs/classes/traits/enums, type aliases/typedefs, \
@@ -109,10 +157,9 @@ def ingest(
     for index, path in enumerate(files, start=1):
         rel = path.relative_to(root).as_posix()
         language = language_for_file(path) or "python"
-        # Text vs binary: only index files that decode cleanly as UTF-8.
-        try:
-            code = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
+        # Text vs binary: try common encodings; skip if none decode.
+        code = _read_source(path)
+        if code is None:
             if on_progress:
                 on_progress(index, len(files), rel, 0)  # binary, skipped
             continue

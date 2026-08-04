@@ -160,9 +160,10 @@ API keys are read from `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` or
 - It **indexes the directory once, on first run** (when no `manifest.json` exists
   yet). After that the manifest persists; to re-index after big edits, delete
   `manifest.json` and relaunch. Indexing is *approximate* (the LLM may miss or
-  mis-describe some definitions) and costs one LLM call per source file. Non-text
-  (binary) files are skipped automatically, as are noisy directories (`.git`,
-  `node_modules`, `venv`, `build`, …).
+  mis-describe some definitions) and costs one LLM call per source file. Source
+  is read as UTF-8; other text encodings (UTF-16, CJK legacy) are detected
+  best-effort. Binary files and noisy directories (`.git`, `node_modules`, `venv`,
+  `build`, …) are skipped automatically.
 
 ## Status
 

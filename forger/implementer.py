@@ -87,7 +87,7 @@ def parse(raw: str, module: ModuleSpec, known_names: set[str]) -> ImplementedMod
 
 
 def extract_code_block(raw: str) -> str:
-    match = re.search(r"```(?:[a-zA-Z0-9_+.\-#]*)?\n(.*?)```", raw, re.DOTALL)
+    match = re.search(r"```(?:[a-zA-Z0-9_+.\-#]*)?[ \t]*\n(.*)```", raw, re.DOTALL)
     return match.group(1).strip() if match else ""
 
 
