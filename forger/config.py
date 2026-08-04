@@ -58,6 +58,7 @@ class Config:
     session_language: str | None = None  # canonical, or None
     embed_provider: str | None = None  # none | fastembed | sentence-transformers
     embed_model: str | None = None  # local embedding model name
+    manifest_override: Path | None = None  # keep the index outside library_dir
 
     def resolved_model(self) -> str:
         if self.model:
@@ -85,6 +86,10 @@ class Config:
 
     @property
     def manifest_path(self) -> Path:
+        # When overridden, the manifest (index) lives outside library_dir -- used
+        # so ingesting an existing repo never writes anything into that repo.
+        if self.manifest_override is not None:
+            return self.manifest_override
         return self.library_dir / "manifest.json"
 
     @classmethod

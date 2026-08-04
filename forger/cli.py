@@ -50,6 +50,10 @@ def main(argv: list[str] | None = None) -> None:
     config = Config.from_env()
     if ns.library:
         config.library_dir = Path(ns.library)
+        # If this repo was ingested, use its read-only index (kept outside the repo).
+        from forger.ingest import manifest_path_for
+        if manifest_path_for(ns.library).exists():
+            config.manifest_override = manifest_path_for(ns.library)
     if ns.provider:
         config.provider = ns.provider
     if ns.model:
@@ -96,19 +100,25 @@ def _run_ingest(argv: list[str]) -> None:
     if ns.lang:
         config.session_language = canonical_language(ns.lang)
 
-    from forger.ingest import ingest
+    from forger.ingest import ingest, manifest_path_for
     from forger.llm import make_provider
 
     llm = make_provider(config)
 
     def progress(done: int, total: int, rel: str, added: int) -> None:
-        print(f"  [{done}/{total}] {rel}  (+{added} definition{'s' if added != 1 else ''})")
+        if added < 0:
+            print(f"  [{done}/{total}] {rel}  (unchanged, skipped)")
+        else:
+            print(f"  [{done}/{total}] {rel}  (+{added} definition{'s' if added != 1 else ''})")
 
-    manifest, files, defs = ingest(
-        ns.repo_dir, config, llm, max_files=ns.max_files, on_progress=progress
+    manifest, files, reanalyzed, defs = ingest(
+        ns.repo_dir, llm, max_files=ns.max_files, on_progress=progress
     )
-    print(f"Indexed {files} file(s), {defs} definition(s) -> {Path(ns.repo_dir) / 'manifest.json'}")
-    print("Now forge against it:  forger --library " + ns.repo_dir)
+    print(
+        f"Indexed {files} file(s) ({reanalyzed} re-analyzed), "
+        f"{defs} definition(s) -> {manifest_path_for(ns.repo_dir)}"
+    )
+    print("The repository was not modified. Now forge on it:  forger --library " + ns.repo_dir)
 
 
 if __name__ == "__main__":
