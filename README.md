@@ -25,8 +25,7 @@ labor:
   search that library and compose existing ones instead of being reinvented.
 
 The net effect: you stay in command of the codebase while the LLM accelerates
-the grind — and a locally-served open-source model is a first-class citizen,
-not a fallback.
+the grind — and a local open-source model is enough; no cloud model required.
 
 > Philosophy: **the human designs bottom-up; the LLM implements, documents, and
 > structures — and because the LLM only implements, even modest models suffice.**
