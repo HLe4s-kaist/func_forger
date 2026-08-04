@@ -17,6 +17,7 @@ from pathlib import Path
 from forger.agent import regen_range
 from forger.config import Config
 from forger.tui import ForgeApp
+from textual.widgets import Input
 
 
 class FakeLLM:
@@ -158,17 +159,20 @@ def test_vim_modal_insert_and_delete_line():
 def test_backend_apply_rebuilds_provider():
     async def run():
         from forger.llm import OpenAIProvider
+        from textual.widgets import Select as _Select
         cfg = _config()
         app = ForgeApp(cfg)
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            app._on_backend({
-                "provider": "openai-compat",
-                "base_url": "http://localhost:8000/v1",
-                "model": "llama3.1",
-                "key": "x",
-            })
-            await pilot.pause(0.02)
+            app.action_backend()  # open the backend screen
+            await pilot.pause()
+            screen = app.screen
+            assert isinstance(screen.query_one("#provider", _Select), _Select)
+            screen.query_one("#provider", _Select).value = "openai-compat"
+            screen.query_one("#base_url", Input).value = "http://localhost:8000/v1"
+            screen.query_one("#model", Input).value = "llama3.1"
+            await pilot.press("enter")  # submit via the focused input
+            await pilot.pause(0.05)
             assert app.config.provider == "openai-compat"
             assert app.config.base_url == "http://localhost:8000/v1"
             assert app.config.model == "llama3.1"

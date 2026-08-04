@@ -30,7 +30,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, OptionList, Static, TextArea, Tree
+from textual.widgets import Footer, Header, Input, Label, OptionList, Select, Static, TextArea, Tree
 from textual.widgets.option_list import Option
 
 from forger.agent import ForgeError, _used_names, forge_documented, regen_range
@@ -126,22 +126,38 @@ class BackendScreen(ModalScreen):
         self.config = config
 
     def compose(self) -> ComposeResult:
+        provider = self.config.provider or "anthropic"
+        if provider not in ("anthropic", "openai-compat"):
+            provider = "anthropic"
         yield Vertical(
             Label("LLM backend"),
-            Input(self.config.provider or "", id="provider", placeholder="anthropic | openai-compat"),
-            Input(self.config.resolved_base_url() or "", id="base_url", placeholder="base URL"),
+            Label("Provider"),
+            Select(
+                [
+                    ("Anthropic (Claude / GLM proxy)", "anthropic"),
+                    ("OpenAI-compatible (OpenAI / vLLM / Ollama)", "openai-compat"),
+                ],
+                value=provider,
+                id="provider",
+                allow_blank=False,
+            ),
+            Label("Base URL"),
+            Input(self.config.resolved_base_url() or "", id="base_url", placeholder="http://host:port/v1"),
+            Label("Model"),
             Input(self.config.model or "", id="model", placeholder="model id"),
-            Input("", id="key", placeholder="api key (blank = keep)"),
+            Label("API key (blank = keep)"),
+            Input("", id="key"),
             Static("[enter] apply   [esc] cancel"),
             id="backend_box",
         )
 
     def on_mount(self) -> None:
-        self.query_one("#provider", Input).focus()
+        self.query_one("#base_url", Input).focus()
 
     @on(Input.Submitted)
     def submitted(self, event: Input.Submitted) -> None:
         values = {widget.id: widget.value for widget in self.query(Input)}
+        values["provider"] = self.query_one("#provider", Select).value
         self.dismiss(values)
 
     def action_cancel(self) -> None:
