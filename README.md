@@ -145,6 +145,26 @@ Bring your own model. Func-Forger talks to any LLM API you configure:
 Provider, base URL, model, and API key are configurable via CLI flags,
 environment variables, or in-app commands.
 
+## Apply to an existing project
+
+Index an existing codebase so its definitions become searchable and reusable,
+then forge new code that builds on them:
+
+```bash
+forger ingest ./my_repo            # the LLM reads each source file and records
+                                   # every top-level definition (name, kind,
+                                   # signature) with a one-line searchable
+                                   # description
+forger --library ./my_repo         # now forge as usual; existing definitions are
+                                   # reused, and the sidebar tree mirrors the
+                                   # repository's own structure
+```
+
+Ingestion is language-agnostic (the LLM does the analysis — no per-language
+parser). Noisy directories (`.git`, `node_modules`, `venv`, `build`, `target`,
+…) and files over 200 KB are skipped. `--max-files N` caps the run for large
+repositories.
+
 ## Running
 
 ```bash

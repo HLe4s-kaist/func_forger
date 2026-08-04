@@ -413,6 +413,48 @@ def test_null_embedder_is_unavailable():
     assert NullEmbedder().available() is False
 
 
+# -- repo ingestion --------------------------------------------------------
+
+
+def test_ingest_indexes_repo_files_with_real_paths():
+    from forger.ingest import ingest
+
+    root = Path(tempfile.mkdtemp())
+    (root / "src").mkdir()
+    (root / "src" / "add.py").write_text("def add(a, b):\n    return a + b\n")
+    (root / "src" / "math.c").write_text("int add(int a, int b){ return a+b; }\n")
+    (root / "node_modules").mkdir()
+    (root / "node_modules" / "x.js").write_text("function junk() {}\n")  # excluded
+    (root / "README.md").write_text("# readme\n")  # not source
+
+    class IngestLLM:
+        def complete(self, system, messages, *, model=None):
+            content = messages[0]["content"]
+            if "def add" in content:
+                return ('{"language":"python","definitions":[{"name":"add",'
+                        '"kind":"function","signature":"add(a, b)",'
+                        '"description":"sum two values"}]}')
+            if "int add" in content:
+                return ('{"language":"c","definitions":[{"name":"add",'
+                        '"kind":"function","signature":"int add(int, int)",'
+                        '"description":"c sum"}]}')
+            return '{"language":"x","definitions":[]}'
+
+    cfg = Config()
+    cfg.provider = "anthropic"
+    manifest, files, defs = ingest(root, cfg, IngestLLM())
+    assert files == 2, f"expected 2 source files, got {files}"
+    assert defs == 2, defs
+    # Same name, different languages -> coexist
+    assert manifest.get("python", "add") is not None
+    assert manifest.get("c", "add") is not None
+    # file_path mirrors the repository's own structure
+    assert manifest.get("python", "add").file_path == "src/add.py"
+    assert manifest.get("c", "add").file_path == "src/math.c"
+    # persisted to disk
+    assert (root / "manifest.json").exists()
+
+
 # -- agentic forge seeding -------------------------------------------------
 
 
