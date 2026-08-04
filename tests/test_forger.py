@@ -21,7 +21,7 @@ from forger.library import write_module
 from forger.manifest import Manifest, ManifestEntry
 from forger.retrieve import retrieve, search_library
 from forger.agent import forge_documented, _format_lookup
-from forger.spec import FuncSpec, ModuleSpec
+from forger.spec import DefSpec, ModuleSpec
 
 
 class FakeLLM:
@@ -80,9 +80,9 @@ def test_normalize_code_via_llm():
     module = normalize("def add(a: int, b: int) -> int: ...", InputKind.CODE, None, llm)
     assert module.target_language == "python"
     assert module.module_name == "arith"
-    assert module.functions[0].name == "add"
-    assert module.functions[0].params == [("a", "int"), ("b", "int")]
-    assert module.functions[0].return_type == "int"
+    assert module.definitions[0].name == "add"
+    assert module.definitions[0].params == [("a", "int"), ("b", "int")]
+    assert module.definitions[0].return_type == "int"
 
 
 def test_normalize_nl_requires_language():
@@ -156,7 +156,7 @@ def _lib_with_add():
 
 def test_retrieve_finds_same_language_helper():
     m = _lib_with_add()
-    spec = FuncSpec(
+    spec = DefSpec(
         name="double_sum",
         params=[("x", "int"), ("y", "int")],
         return_type="int",
@@ -169,14 +169,14 @@ def test_retrieve_finds_same_language_helper():
 
 def test_retrieve_excludes_other_languages():
     m = _lib_with_add()
-    spec = FuncSpec(name="double_sum", target_language="python", description="sum")
+    spec = DefSpec(name="double_sum", target_language="python", description="sum")
     hits = retrieve(spec, m)
     assert all(e.target_language == "python" for e in hits)
 
 
 def test_retrieve_excludes_self():
     m = _lib_with_add()
-    spec = FuncSpec(name="add", target_language="python", description="sum")
+    spec = DefSpec(name="add", target_language="python", description="sum")
     hits = retrieve(spec, m)
     assert all(e.name != "add" or e.target_language != "python" for e in hits)
 
@@ -192,14 +192,14 @@ def test_parse_extracts_block_and_used_names():
         "    return 2 * add(x, y)\n"
         "```\n"
     )
-    module = ModuleSpec(target_language="python", functions=[FuncSpec(name="double_sum")])
+    module = ModuleSpec(target_language="python", definitions=[DefSpec(name="double_sum")])
     implemented = parse(raw, module, {"add", "mul"})
     assert "def double_sum" in implemented.code
     assert implemented.used_names == ["add"]
 
 
 def test_parse_rejects_missing_code():
-    module = ModuleSpec(target_language="python", functions=[FuncSpec(name="f")])
+    module = ModuleSpec(target_language="python", definitions=[DefSpec(name="f")])
     try:
         parse("no code here at all", module, set())
         assert False, "expected ValueError"
@@ -223,7 +223,7 @@ def test_write_module_and_imported_by():
     )
     module = ModuleSpec(
         target_language="python",
-        functions=[FuncSpec(name="double_sum", params=[("x", "int")], return_type="int")],
+        definitions=[DefSpec(name="double_sum", params=[("x", "int")], return_type="int")],
     )
     implemented = ImplementedModule(
         code="def double_sum(x, y):\n    return 2 * add(x, y)\n",
@@ -242,7 +242,7 @@ def test_write_module_and_imported_by():
 def test_write_module_flags_unknown_deps():
     d = tempfile.mkdtemp()
     m = Manifest(Path(d) / "manifest.json")
-    module = ModuleSpec(target_language="python", functions=[FuncSpec(name="f")])
+    module = ModuleSpec(target_language="python", definitions=[DefSpec(name="f")])
     implemented = ImplementedModule(code="def f():\n    return ghost()\n", used_names=["ghost"])
     result = write_module(module, implemented, Path(d), m)
     assert result.unknown_deps == ["ghost"]
@@ -396,7 +396,59 @@ def test_format_lookup_returns_exact_signature():
     out = _format_lookup("add", m, "python")
     assert "signature: add(a: int, b: int) -> int" in out
     assert "returns: int" in out
+    assert "kind: function" in out
     assert "not found" in _format_lookup("does_not_exist", m, "python")
+
+
+def test_normalize_returns_kind_for_struct_and_function():
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "language": "c",
+                "category": "geometry",
+                "module_name": "point",
+                "definitions": [
+                    {"name": "Point", "kind": "type", "signature": "struct Point { float x; float y; }",
+                     "description": "2D point"},
+                    {"name": "distance", "kind": "function", "params": [["a", "Point*"], ["b", "Point*"]],
+                     "return_type": "float", "signature": "distance(a, b) -> float",
+                     "description": "euclidean distance"},
+                ],
+            }
+        )
+    )
+    module = normalize(
+        "struct Point { float x; float y; };\nfloat distance(Point* a, Point* b);",
+        InputKind.CODE, "c", llm,
+    )
+    kinds = {d.name: d.kind for d in module.definitions}
+    assert kinds == {"Point": "type", "distance": "function"}
+    assert module.target_language == "c"
+
+
+def test_write_module_stores_kind_and_signature():
+    d = tempfile.mkdtemp()
+    m = Manifest(Path(d) / "manifest.json")
+    module = ModuleSpec(
+        target_language="c", module_name="point", category="geometry",
+        definitions=[
+            DefSpec(name="Point", kind="type", target_language="c",
+                    signature="struct Point { float x; float y; }"),
+            DefSpec(name="distance", kind="function", target_language="c", params=[("a", "Point*")]),
+        ],
+    )
+    implemented = ImplementedModule(
+        code="// 2D point.\nstruct Point { float x; float y; };\n"
+             "// euclidean distance.\nfloat distance(Point* a, Point* b) { return 0; }\n",
+        used_names=[],
+    )
+    res = write_module(module, implemented, Path(d), m)
+    by_name = {e.name: e for e in res.entries}
+    assert by_name["Point"].kind == "type"
+    assert by_name["distance"].kind == "function"
+    assert "struct Point" in by_name["Point"].signature
+    assert by_name["Point"].doc  # doc extracted for the type too
+    assert by_name["distance"].doc
 
 
 def test_agent_uses_lookup_then_calls_correctly():

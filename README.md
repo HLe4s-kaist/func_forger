@@ -15,6 +15,14 @@ new ones**. Small primitives are composed into larger ones, bottom-up.
 > Philosophy: **the human decides what functions to build, bottom-up; the LLM
 > implements them, documents them, and structures the codebase.**
 
+## Works well even with open-source models
+
+This workflow offloads most of the inferential burden from the LLM: the human
+supplies the skeleton and the design, and delegates only the implementation.
+Because the model never has to decide *what* to build or *how* to structure it
+-- only how to fill in well-specified bodies -- Func-Forger stays genuinely
+useful even when all you have are open-source / self-hosted models.
+
 ## The interface (TUI)
 
 A two-pane terminal app:

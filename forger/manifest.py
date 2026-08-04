@@ -28,6 +28,7 @@ class ManifestEntry:
     file_path: str
     description: str = ""
     doc: str = ""
+    kind: str = "function"  # function | type | typedef | macro | constant | ...
     params: list[dict] = field(default_factory=list)
     return_type: str | None = None
     depends_on: list[str] = field(default_factory=list)
@@ -48,6 +49,7 @@ class ManifestEntry:
             "return_type": self.return_type,
             "description": self.description,
             "doc": self.doc,
+            "kind": self.kind,
             "file_path": self.file_path,
             "depends_on": self.depends_on,
             "imported_by": self.imported_by,
@@ -63,6 +65,7 @@ class ManifestEntry:
             file_path=d["file_path"],
             description=d.get("description", ""),
             doc=d.get("doc", ""),
+            kind=d.get("kind", "function"),
             params=d.get("params", []),
             return_type=d.get("return_type"),
             depends_on=d.get("depends_on", []),

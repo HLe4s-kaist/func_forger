@@ -38,7 +38,7 @@ class ImplementedModule:
 
 def build_user_prompt(module: ModuleSpec, retrieved: list[ManifestEntry]) -> str:
     lines = [f"Target language: {module.target_language}", "", "Functions to implement:"]
-    for fn in module.functions:
+    for fn in module.definitions:
         params = ", ".join(f"{n}: {t}" for n, t in fn.params)
         ret = f" -> {fn.return_type}" if fn.return_type else ""
         lines.append(f"- {fn.name}({params}){ret}")
@@ -71,7 +71,7 @@ def parse(raw: str, module: ModuleSpec, known_names: set[str]) -> ImplementedMod
     if not code:
         raise ValueError("The model returned no code block to parse.")
 
-    own_names = {fn.name for fn in module.functions}
+    own_names = {fn.name for fn in module.definitions}
     used = sorted(
         name
         for name in known_names

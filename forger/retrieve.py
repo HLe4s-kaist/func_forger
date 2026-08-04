@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 
 from forger.manifest import Manifest, ManifestEntry
-from forger.spec import FuncSpec
+from forger.spec import DefSpec
 
 # A "word" is a letter run optionally continued by digits; separators and
 # camelCase boundaries are split afterwards so identifiers index by words.
@@ -105,7 +105,7 @@ def search_library(
     return [entry for entry, _ in scored[:top_k]]
 
 
-def retrieve(spec: FuncSpec, manifest: Manifest, top_k: int = 8) -> list[ManifestEntry]:
+def retrieve(spec: DefSpec, manifest: Manifest, top_k: int = 8) -> list[ManifestEntry]:
     """Return up to ``top_k`` same-language library functions relevant to ``spec``."""
     query_tokens = _tokens(" ".join([spec.name, spec.description or ""]))
     query_tokens |= _tokens(" ".join(f"{n} {t}" for n, t in spec.params))

@@ -211,7 +211,7 @@ class ForgeApp(App):
         self.config = config
         self.manifest = Manifest(config.manifest_path)
         self.llm = make_provider(config)
-        self.language = config.session_language or "python"
+        self.language = config.session_language or "c"
         self._last_module = None
         self._last_result = None
         self._skeleton = ""
@@ -312,7 +312,7 @@ class ForgeApp(App):
         ol = self.query_one("#funclist", OptionList)
         ol.clear_options()
         for entry in sorted(self.manifest.all(), key=lambda e: (e.target_language, e.name)):
-            label = f"{entry.target_language}:{entry.name}"
+            label = f"{entry.target_language}:{entry.name} [{entry.kind}]"
             if entry.description:
                 label += f" — {entry.description[:48]}"
             ol.add_option(Option(label, id=entry.id))
@@ -352,7 +352,7 @@ class ForgeApp(App):
             hay = f"{entry.target_language} {entry.name} {entry.description} {entry.doc}".lower()
             if query and query not in hay:
                 continue
-            label = f"{entry.target_language}:{entry.name}"
+            label = f"{entry.target_language}:{entry.name} [{entry.kind}]"
             if entry.description:
                 label += f" — {entry.description[:48]}"
             ol.add_option(Option(label, id=entry.id))

@@ -3,11 +3,13 @@
 Three input forms are auto-detected:
 
 * FILE -- an existing path to a file containing skeletons.
-* CODE -- pasted source code with function signatures (bodies empty/stubbed).
-* NL   -- a natural-language description; the agent designs the signature too.
+* CODE -- pasted source code with top-level definitions (bodies empty/stubbed).
+* NL   -- a natural-language description; the agent designs the definitions too.
 
-All forms normalize to a :class:`~forger.spec.ModuleSpec`. Signature extraction
-(CODE) and signature design (NL) are done by the LLM and returned as JSON.
+All forms normalize to a :class:`~forger.spec.ModuleSpec`. The skeleton is
+parsed into top-level DEFINITIONS (functions, structs/classes, typedefs, macros,
+constants, ...) -- each with a language-agnostic ``kind`` chosen by the LLM, so
+no per-language parsing is required.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import re
 from enum import Enum
 from pathlib import Path
 
-from forger.spec import FuncSpec, ModuleSpec
+from forger.spec import DefSpec, ModuleSpec
 
 
 class InputKind(str, Enum):
@@ -39,11 +41,13 @@ _CODE_PATTERNS = [
     re.compile(r"\bfunc\b"),                             # swift / go-ish
     re.compile(r"\bfn\b"),                               # rust
     re.compile(r"\bfunction\s+\w+\s*\("),                # javascript: function name(
-    re.compile(r"\b(public|private|protected|static|void|class)\b"),
+    re.compile(r"\b(public|private|protected|static|void|class|struct)\b"),
     re.compile(r"->"),                                   # return-type arrow
     re.compile(r"=>"),                                   # arrow function
     re.compile(r"\([^()]*:\s*[A-Za-z_]\w*[^()]*\)"),     # typed param list, e.g. (a: int)
     re.compile(r";\s*$", re.MULTILINE),                  # statement-terminating semicolon (C, etc.)
+    re.compile(r"#define\b|\bmacro_rules!\b"),           # macros
+    re.compile(r"\btypedef\b|\busing\b|\btype\s+\w+\b"),  # type aliases
     re.compile(r"```"),                                  # already fenced
 ]
 
@@ -90,21 +94,28 @@ def normalize(text: str, kind: InputKind, language: str | None, llm) -> ModuleSp
 _JSON_SHAPE = (
     '{"language": "...", "category": "arithmetic", '
     '"module_name": "snake_case_slug", '
-    '"functions": [{"name": "...", "params": [["a", "int"]], '
+    '"definitions": [{"name": "...", "kind": "function", '
+    '"signature": "name(args) -> ret", "params": [["a", "int"]], '
     '"return_type": "int", "description": "one line"}]}'
+)
+
+_PARSE_INSTRUCTIONS = (
+    "You parse a source-code skeleton into the top-level DEFINITIONS it "
+    "declares -- not only functions but anything the language defines at the "
+    "top level: functions, structs/classes/traits/enums, type aliases/typedefs, "
+    "macros, and constants/globals. Detect the language. Give the module a "
+    "short snake_case ``category`` for its role (e.g. arithmetic, strings, io, "
+    "parsing, geometry, math). For EACH definition give: name; ``kind`` (the "
+    "closest of function, type, typedef, macro, constant); a concise "
+    "``signature`` string (for a function: 'name(params) -> ret'; for a type or "
+    "macro: its shape/form); and a one-line description. For functions also give "
+    "params as [name, type] pairs and return_type. Respond with ONLY a JSON "
+    "object of this shape:\n"
 )
 
 
 def _normalize_code(code: str, source: str, language: str | None, llm) -> ModuleSpec:
-    system = (
-        "You parse source-code skeletons into structured function signatures. "
-        "Detect the programming language. Give the module a short snake_case "
-        "``category`` describing its role (e.g. arithmetic, strings, io, "
-        "parsing, sorting, crypto, math). For each function give: name, params "
-        "as [name, type] pairs, return_type (or null), and a one-line "
-        "description. Respond with ONLY a JSON object of this shape:\n"
-        + _JSON_SHAPE
-    )
+    system = _PARSE_INSTRUCTIONS + _JSON_SHAPE
     hint = (
         f"Detected-language hint (may be wrong): {language}."
         if language
@@ -122,12 +133,13 @@ def _normalize_nl(text: str, language: str | None, llm) -> ModuleSpec:
             "Set one with `:lang <language>` and retry."
         )
     system = (
-        "You design function signatures from a natural-language description, "
-        "producing one or more functions in the given target language. Give the "
-        "module a short snake_case ``category`` describing its role (e.g. "
-        "arithmetic, strings, io, parsing, sorting, crypto, math). For each "
-        "function give: name, params as [name, type] pairs, return_type (or "
-        "null), and a one-line description. Respond with ONLY a JSON object of "
+        "You design top-level DEFINITIONS from a natural-language description, "
+        "in the given target language -- not only functions but structs/classes, "
+        "typedefs, macros, constants, etc. Give the module a short snake_case "
+        "``category`` for its role. For EACH definition give: name; ``kind`` "
+        "(function, type, typedef, macro, or constant); a concise ``signature``; "
+        "and a one-line description. For functions also give params as "
+        "[name, type] pairs and return_type. Respond with ONLY a JSON object of "
         "this shape:\n" + _JSON_SHAPE
     )
     user = f"Target language: {language}.\n\nDescription:\n{text}"
@@ -137,8 +149,9 @@ def _normalize_nl(text: str, language: str | None, llm) -> ModuleSpec:
 
 def _module_from_json(data: dict, source: str, fallback: str) -> ModuleSpec:
     language = (data.get("language") or "python").strip().lower()
-    functions: list[FuncSpec] = []
-    for fd in data.get("functions", []):
+    raw_defs = data.get("definitions") or data.get("functions") or []
+    definitions: list[DefSpec] = []
+    for fd in raw_defs:
         name = fd.get("name")
         if not name:
             continue
@@ -147,21 +160,23 @@ def _module_from_json(data: dict, source: str, fallback: str) -> ModuleSpec:
             for p in fd.get("params", [])
             if isinstance(p, (list, tuple)) and len(p) >= 2
         ]
-        functions.append(
-            FuncSpec(
+        definitions.append(
+            DefSpec(
                 name=str(name),
+                kind=(fd.get("kind") or "function").strip().lower() or "function",
                 params=params,
                 return_type=fd.get("return_type"),
+                signature=fd.get("signature") or "",
                 description=fd.get("description"),
                 target_language=language,
                 raw_skeleton=fallback,
             )
         )
-    if not functions:
-        raise ValueError("Could not extract any function signatures from the input.")
+    if not definitions:
+        raise ValueError("Could not extract any definitions from the input.")
     return ModuleSpec(
         target_language=language,
-        functions=functions,
+        definitions=definitions,
         source=source,
         module_name=data.get("module_name"),
         category=(data.get("category") or "").strip().lower() or None,

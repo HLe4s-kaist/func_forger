@@ -153,7 +153,7 @@ class REPL:
             return
 
         collisions = [
-            fn.name for fn in module.functions if self.manifest.get(language, fn.name)
+            fn.name for fn in module.definitions if self.manifest.get(language, fn.name)
         ]
         if collisions:
             self._note("overwriting existing: " + ", ".join(collisions))
@@ -178,7 +178,7 @@ class REPL:
     def _retrieve_union(self, module) -> list[ManifestEntry]:
         retrieved: list[ManifestEntry] = []
         seen: set[str] = set()
-        for fn in module.functions:
+        for fn in module.definitions:
             for entry in retrieve(fn, self.manifest):
                 if entry.id not in seen:
                     seen.add(entry.id)

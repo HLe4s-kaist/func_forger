@@ -75,9 +75,10 @@ def _extract_doc(code: str, name: str) -> str:
     lines = code.splitlines()
     def_line = None
     for i, line in enumerate(lines):
-        if re.search(rf"\b{re.escape(name)}\s*\(", line) and re.search(
-            rf"\b{_DEF_WORDS}\b", line
-        ):
+        # First line that mentions the definition name as a whole word. Works for
+        # any kind (function, struct, typedef, macro, ...) without per-language
+        # keyword knowledge.
+        if re.search(rf"\b{re.escape(name)}\b", line):
             def_line = i
             break
 
@@ -126,7 +127,7 @@ def write_module(
     ``manifest.persist()``.
     """
     language = module.target_language
-    base_name = module.module_name or module.functions[0].name
+    base_name = module.module_name or module.definitions[0].name
     slug = _slugify(base_name)
     parts = [language]
     if module.category:
@@ -148,12 +149,13 @@ def write_module(
             unknown_deps.append(name)
 
     entries: list[ManifestEntry] = []
-    for fn in module.functions:
+    for fn in module.definitions:
         entries.append(
             ManifestEntry(
                 name=fn.name,
                 target_language=language,
-                signature=_signature(fn.name, fn.params, fn.return_type),
+                kind=fn.kind,
+                signature=fn.signature or _signature(fn.name, fn.params, fn.return_type),
                 file_path=str(rel_path),
                 description=fn.description or "",
                 doc=_extract_doc(implemented.code, fn.name),

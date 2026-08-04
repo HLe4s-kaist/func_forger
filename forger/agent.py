@@ -32,42 +32,48 @@ from forger.retrieve import search_library
 SEED_ALL_LIMIT = 20
 
 AGENT_SYSTEM = """\
-You implement function bodies in a target programming language, reusing an \
-existing function library.
+You implement top-level definitions in a target programming language, reusing \
+an existing library. A "definition" is anything the language declares at the \
+top level -- not only functions, but structs/classes/traits/enums, type \
+aliases/typedefs, macros, and constants/globals. A skeleton may declare \
+several of these together; implement ALL of them.
 
-THE MOST IMPORTANT PART OF YOUR OUTPUT IS THE DOCUMENTATION. Functions are \
-later discovered by searching their documentation, so for EVERY function write \
-detailed, rustdoc-style doc comments immediately above its definition. Use the \
+THE MOST IMPORTANT PART OF YOUR OUTPUT IS THE DOCUMENTATION. Definitions are \
+later discovered by searching their documentation, so for EVERY definition \
+write detailed, rustdoc-style doc comments immediately above it. Use the \
 comment syntax of the target language (// or /// for C/C++/Rust/Go/JS/Java; # \
 or a triple-quoted docstring for Python). Each doc block must contain:
-- A one-line summary of what the function does.
-- "Arguments:" -- each argument's name, type, meaning, and any constraints.
-- "Returns:" -- what is returned, and its type.
-- "Behavior:" -- how the function implements its logic, step by step: the \
-algorithm, edge cases handled, and which existing library functions it calls \
-and why.
+- A one-line summary of what the definition is/does.
+- For functions: "Arguments:" (each name, type, meaning) and "Returns:".
+- For types/structs/macros: the fields/form/parameters and their meaning.
+- "Behavior:" -- how it works, step by step, and which existing library \
+definitions it uses and why.
 Write specific, searchable prose -- use the words someone would type to find \
-this function again. Add concise inline comments on non-obvious lines.
+this definition again. Add concise inline comments on non-obvious lines.
 
-BEFORE writing any code, you MUST check the library for functions you can reuse.
-This is mandatory, not optional. You have two tools, each written as its own line:
-- `LOOKUP: <name>` -- get the EXACT signature, params, return type, and doc of a
-  specific function. Use this whenever the user references a function by name, and
-  before you call ANY function whose exact signature is not already in front of you.
-- `SEARCH: <query>` -- find functions by purpose (free text), e.g.
+BEFORE writing any code, you MUST check the library for definitions you can \
+reuse (functions to call, types/macros to reference). This is mandatory. You \
+have two tools, each written as its own line:
+- `LOOKUP: <name>` -- get the EXACT kind, signature, params, return type, and \
+doc of a specific definition. Use this whenever the user references a \
+definition by name, and before you use ANY definition whose exact form is not \
+already in front of you.
+- `SEARCH: <query>` -- find definitions by purpose (free text), e.g.
     SEARCH: sum two integers
-You will receive the results. Run as many LOOKUP/SEARCH lines as you need, THEN
-write the code. NEVER call a library function whose exact signature you have not
-seen in a LOOKUP/SEARCH result or the available list -- if unsure, LOOKUP it first.
+You will receive the results. Run as many LOOKUP/SEARCH lines as you need, THEN \
+write the code. NEVER use a library definition whose exact form you have not \
+seen in a LOOKUP/SEARCH result or the available list -- if unsure, LOOKUP it \
+first.
 
 When ready, output the COMPLETE implemented module in ONE fenced code block.
-- Implement exactly the skeleton's functions, keeping their signatures.
-- REUSE IS STRONGLY PREFERRED. If ANY listed/looked-up function can provide part
-  of the logic, CALL it (importing it correctly for the target language) instead
-  of reimplementing. Build new functions by composing existing ones wherever you
-  can. NEVER invent or call a library function that did not appear in a LOOKUP/
-  SEARCH result or the available list.
-- When you CALL a library function, copy its signature EXACTLY -- the same \
+- Implement EVERY top-level definition in the skeleton, keeping their \
+signatures/shapes.
+- REUSE IS STRONGLY PREFERRED. If ANY listed/looked-up definition can help -- a \
+function to call, or a type/struct/macro to reference -- use it (importing or \
+declaring it correctly for the target language) instead of reimplementing or \
+redefining. NEVER invent or use a library definition that did not appear in a \
+LOOKUP/SEARCH result or the available list.
+- When you use a library function, copy its signature EXACTLY -- the same \
 argument ORDER, TYPES, and COUNT, taken from a LOOKUP/SEARCH result or the \
 available list. Never guess.
 - Include any imports the module needs.
@@ -106,7 +112,7 @@ def _format_results(query: str, hits: list[ManifestEntry]) -> str:
         return f"SEARCH {query!r}: (no matches)"
     lines = [f"SEARCH {query!r}:"]
     for entry in hits:
-        lines.append(f"  - {entry.signature}  -- {entry.description}")
+        lines.append(f"  - [{entry.kind}] {entry.signature}  -- {entry.description}")
         lines.append(f"    defined in: {entry.file_path}")
         if entry.doc:
             lines.append("    doc: " + entry.doc.replace("\n", "\n    "))
@@ -133,7 +139,7 @@ def _format_lookup(name: str, manifest: Manifest, language: str) -> str:
         entry = candidates[0] if candidates else None
     if entry is None:
         return f"LOOKUP {target!r}: (not found in the library)"
-    lines = [f"LOOKUP {target!r}:", f"  signature: {entry.signature}"]
+    lines = [f"LOOKUP {target!r}:", f"  kind: {entry.kind}", f"  signature: {entry.signature}"]
     if entry.params:
         params = ", ".join(f"{p.get('name', '')}: {p.get('type', '')}" for p in entry.params)
         lines.append(f"  params: {params}")
@@ -191,9 +197,9 @@ def forge_documented(
         seed_hits = search_library(skeleton, manifest, language, top_k=12)
     context = ""
     if seed_hits:
-        lines = ["Available library functions (REUSE these wherever reasonable):"]
+        lines = ["Available library definitions (REUSE these wherever reasonable):"]
         for entry in seed_hits:
-            lines.append(f"- {entry.signature}  ({entry.file_path})")
+            lines.append(f"- [{entry.kind}] {entry.signature}  ({entry.file_path})")
             if entry.doc:
                 lines.append("    " + entry.doc.replace("\n", "\n    "))
         context = "\n".join(lines) + "\n\n"
