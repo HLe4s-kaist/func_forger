@@ -29,10 +29,9 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.color import Color
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Select, Static, TextArea, Tree
+from textual.widgets import Footer, Header, Input, Label, OptionList, Select, Static, TextArea, Tree
 from textual.widgets.option_list import Option
 
 from forger.agent import ForgeError, _used_names, forge_documented, regen_range
@@ -65,14 +64,6 @@ class State:
     ENTRY = "entry"
     FORGING = "forging"
     REVIEW = "review"
-
-
-class StreamUpdate(Message):
-    """Cross-thread message: write text to the stream panel."""
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-        super().__init__()
 
 
 class InstructionScreen(ModalScreen[str]):
@@ -245,7 +236,7 @@ class ForgeApp(App):
         with Horizontal():
             with Vertical(id="main"):
                 yield VimTextArea(id="editor")
-                yield RichLog(id="stream")
+                yield TextArea(id="stream", read_only=True, show_line_numbers=False)
                 yield Static("", id="status")
             with Vertical(id="sidebar"):
                 yield Label("Library search")
@@ -281,10 +272,9 @@ class ForgeApp(App):
         self._last_status_msg = msg
         self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
 
-    @on(StreamUpdate)
-    def _on_stream_update(self, message: StreamUpdate) -> None:
-        """Handle StreamUpdate message — writes to the panel on the UI thread."""
-        self.query_one("#stream", RichLog).write(message.text)
+    def _update_stream(self, text: str) -> None:
+        """Write text to the stream panel (TextArea — same widget type as the editor)."""
+        self.query_one("#stream", TextArea).text = text
 
     def _flash(self, widget, color: str = "green", hold: float = 0.18) -> None:
         """A brief "whoosh": pulse a widget's background to ``color`` and back.
@@ -435,8 +425,8 @@ class ForgeApp(App):
                 msg = "thinking…"
             # Show in the status bar (guaranteed visible — spinner renders there)
             self.call_from_thread(setattr, self, "_forging_msg", msg)
-            # Post a message to write to the stream panel (processed on UI thread)
-            self.post_message(StreamUpdate(raw))
+            # Write to stream panel (TextArea — guaranteed to render, same widget as editor)
+            self.call_from_thread(self._update_stream, raw)
             # Also write to file
             try:
                 with open("/tmp/forger_stream.log", "a") as f:
@@ -465,7 +455,7 @@ class ForgeApp(App):
         self.state = State.FORGING
         self._forging_msg = "starting…"
         self._spin_i = 0
-        self.query_one("#stream", RichLog).clear()
+        self.query_one("#stream", TextArea).text = ""
         try:
             open("/tmp/forger_stream.log", "w").close()
         except Exception:
