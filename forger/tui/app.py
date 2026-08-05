@@ -260,6 +260,8 @@ class ForgeApp(App):
         self._set_editor_language(self.language)
         self._refresh_sidebar()
         self._set_status(self._entry_hint())
+        # Show a ready message in the stream panel so the user can see it works
+        self.query_one("#stream", TextArea).text = "Ready. Press Ctrl+G to forge."
         self.query_one("#editor", TextArea).focus()
 
     # -- helpers -----------------------------------------------------------
