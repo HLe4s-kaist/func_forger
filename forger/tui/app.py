@@ -417,13 +417,20 @@ class ForgeApp(App):
 
         def on_turn(raw, searches, code):
             if searches:
-                msg = "searching library: " + "; ".join(searches)
+                msg = "SEARCH: " + "; ".join(searches)[:60]
             elif code:
-                msg = "writing documented code…"
+                first_line = next((l for l in raw.split("\n") if l.strip() and not l.strip().startswith("```")), "")[:60]
+                msg = "code: " + first_line if first_line else "code generated"
             else:
                 msg = "thinking…"
+            # Show in the status bar (guaranteed visible — spinner renders there)
             self.call_from_thread(setattr, self, "_forging_msg", msg)
-            self.call_from_thread(self._stream_show, raw)
+            # Write full response to file (tail -f /tmp/forger_stream.log)
+            try:
+                with open("/tmp/forger_stream.log", "a") as f:
+                    f.write(raw + "\n--- turn ---\n")
+            except Exception:
+                pass
 
         try:
             module = normalize(skeleton, InputKind.CODE, self.language, self.llm)
@@ -446,6 +453,10 @@ class ForgeApp(App):
         self._forging_msg = "starting…"
         self._spin_i = 0
         self.query_one("#stream", RichLog).clear()
+        try:
+            open("/tmp/forger_stream.log", "w").close()
+        except Exception:
+            pass
         self.query_one("#editor", TextArea).read_only = True
         self._spin_timer = self.set_interval(0.12, self._spin_tick)
 
