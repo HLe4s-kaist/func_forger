@@ -31,7 +31,7 @@ from textual.color import Color
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, OptionList, Select, Static, TextArea, Tree
+from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Select, Static, TextArea, Tree
 from textual.widgets.option_list import Option
 
 from forger.agent import ForgeError, _used_names, forge_documented, regen_range
@@ -175,7 +175,7 @@ class ForgeApp(App):
                padding: 0 0 0 1; }
     #editor { height: 1fr; border: round $primary; }
     #editor.vim-insert { border: round $success; }
-    #stream { height: 8; border: round $accent; color: $text-muted; padding: 0 1; }
+    #stream { height: 8; border: round $accent; color: $text; padding: 0 1; }
     #status { height: 1; background: $boost; color: $text; padding: 0 1; }
     #funclist { height: 1fr; border: round $panel; }
     #filetree { height: 1fr; border: round $panel; }
@@ -222,7 +222,6 @@ class ForgeApp(App):
         self._vim_mode = "normal"
         self._last_status_msg = ""
         self._forging_msg = ""
-        self._stream_buf = ""
         self._spin_i = 0
         self._spin_timer = None
         self._reveal_timer = None
@@ -237,7 +236,7 @@ class ForgeApp(App):
         with Horizontal():
             with Vertical(id="main"):
                 yield VimTextArea(id="editor")
-                yield Static("", id="stream")
+                yield RichLog(id="stream")
                 yield Static("", id="status")
             with Vertical(id="sidebar"):
                 yield Label("Library search")
@@ -273,15 +272,9 @@ class ForgeApp(App):
         self._last_status_msg = msg
         self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
 
-    def _stream_append(self, text: str) -> None:
-        self._stream_buf += text
-        self.query_one("#stream", Static).update(self._stream_buf[-3000:])
-
     def _stream_show(self, raw: str) -> None:
-        """Show a complete LLM response in the stream panel (fallback when
-        streaming isn't supported by the endpoint)."""
-        self._stream_buf = raw[-3000:]
-        self.query_one("#stream", Static).update(self._stream_buf)
+        """Show a complete LLM response in the stream panel."""
+        self.query_one("#stream", RichLog).write(raw)
 
     def _flash(self, widget, color: str = "green", hold: float = 0.18) -> None:
         """A brief "whoosh": pulse a widget's background to ``color`` and back.
@@ -432,9 +425,6 @@ class ForgeApp(App):
             self.call_from_thread(setattr, self, "_forging_msg", msg)
             self.call_from_thread(self._stream_show, raw)
 
-        def on_chunk(text):
-            self.call_from_thread(self._stream_append, text)
-
         try:
             module = normalize(skeleton, InputKind.CODE, self.language, self.llm)
             self._last_module = module
@@ -442,7 +432,6 @@ class ForgeApp(App):
             result = forge_documented(
                 skeleton, module.target_language, self.manifest, self.llm,
                 on_turn=on_turn, own_names=set(module.names()), embedder=self.embedder,
-                on_chunk=on_chunk,
             )
             self.call_from_thread(self._finish_forging, result)
         except Exception as exc:
@@ -456,8 +445,7 @@ class ForgeApp(App):
         self.state = State.FORGING
         self._forging_msg = "starting…"
         self._spin_i = 0
-        self._stream_buf = ""
-        self.query_one("#stream", Static).update("")
+        self.query_one("#stream", RichLog).clear()
         self.query_one("#editor", TextArea).read_only = True
         self._spin_timer = self.set_interval(0.12, self._spin_tick)
 
