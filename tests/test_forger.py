@@ -268,39 +268,6 @@ def test_config_resolves_model():
 # -- full pipeline via FakeLLM --------------------------------------------
 
 
-def test_full_forge_pipeline():
-    cfg = Config()
-    cfg.library_dir = Path(tempfile.mkdtemp())
-    cfg.provider = "anthropic"
-
-    from forger.repl import REPL
-
-    repl = REPL(cfg)
-    repl.llm = FakeLLM(
-        # 1) normalize response
-        json.dumps(
-            {
-                "language": "python",
-                "module_name": "arith",
-                "functions": [
-                    {
-                        "name": "add",
-                        "params": [["a", "int"], ["b", "int"]],
-                        "return_type": "int",
-                        "description": "sum",
-                    }
-                ],
-            }
-        ),
-        # 2) implement response
-        "```python\ndef add(a, b):\n    return a + b\n```\n",
-    )
-    repl.cmd_forge("def add(a: int, b: int) -> int: ...")
-
-    assert repl.manifest.get("python", "add") is not None
-    assert (cfg.library_dir / "python" / "arith.py").read_text().strip() == "def add(a, b):\n    return a + b"
-
-
 # -- search (free-text) ----------------------------------------------------
 
 
@@ -429,7 +396,7 @@ def test_ingest_indexes_real_paths_into_the_library():
     (root / "README.md").write_text("# readme\n")  # not source
 
     class IngestLLM:
-        def complete(self, system, messages, *, model=None):
+        def complete(self, system, messages, *, model=None, on_chunk=None):
             content = messages[0]["content"]
             if "def add" in content:
                 return ('{"language":"python","definitions":[{"name":"add",'
@@ -463,7 +430,7 @@ def test_seed_includes_type_definitions():
     captured = {}
 
     class SeedTypeLLM:
-        def complete(self, system, messages, *, model=None):
+        def complete(self, system, messages, *, model=None, on_chunk=None):
             captured["msg"] = messages[0]["content"]
             return "```c\nfloat point_x(struct Point* p) { return p->x; }\n```\n"
 
@@ -486,7 +453,7 @@ def test_forge_seeds_all_small_library():
     captured = {}
 
     class SeedCaptureLLM:
-        def complete(self, system, messages, *, model=None):
+        def complete(self, system, messages, *, model=None, on_chunk=None):
             captured["msg"] = messages[0]["content"]
             return "```python\ndef add(a, b):\n    return a + b\n```\n"
 
@@ -575,7 +542,7 @@ def test_agent_uses_lookup_then_calls_correctly():
     ])
 
     class LookupLLM:
-        def complete(self, system, messages, *, model=None):
+        def complete(self, system, messages, *, model=None, on_chunk=None):
             captured.append(messages)
             return next(responses)
 

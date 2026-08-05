@@ -1,15 +1,12 @@
-"""LLM provider abstraction.
+"""LLM provider abstraction with streaming support.
 
 Two providers share one interface so the rest of the code is provider-agnostic:
 
-* :class:`AnthropicProvider` -- proprietary Claude models.
-* :class:`OpenAIProvider` -- anything behind an OpenAI-compatible Chat
-  Completions endpoint. That covers OpenAI itself **and** open-source /
-  self-hosted models served via Ollama, vLLM, LM Studio, Together, Groq, etc.
+* :class:`AnthropicProvider` -- Claude (or any Anthropic-compatible proxy).
+* :class:`OpenAIProvider` -- any OpenAI-compatible Chat Completions endpoint
+  (OpenAI, Ollama, vLLM, LM Studio, Together, Groq, ...).
 
-The SDK is imported lazily inside each provider, so importing this module (or
-the package) never requires any third-party SDK to be installed. The SDK is
-only needed at the moment an LLM is actually called.
+Both support ``on_chunk`` for real-time streaming of the response text.
 """
 
 from __future__ import annotations
@@ -20,12 +17,19 @@ from typing import Protocol
 class LLMProvider(Protocol):
     """A minimal chat-completion interface used by the implementer."""
 
-    def complete(self, system: str, messages: list[dict], *, model: str | None = None) -> str:
+    def complete(
+        self,
+        system: str,
+        messages: list[dict],
+        *,
+        model: str | None = None,
+        on_chunk=None,
+    ) -> str:
         ...
 
 
 class AnthropicProvider:
-    """Claude via the ``anthropic`` SDK (proprieary backend)."""
+    """Claude via the ``anthropic`` SDK (or any Anthropic-compatible proxy)."""
 
     def __init__(self, api_key: str | None, base_url: str | None = None, model: str | None = None):
         self._api_key = api_key
@@ -37,29 +41,38 @@ class AnthropicProvider:
         if self._client is None:
             try:
                 import anthropic
-            except ImportError as e:  # pragma: no cover - depends on env
+            except ImportError as e:
                 raise RuntimeError(
-                    "The `anthropic` SDK is not installed. Install it with `pip install anthropic`."
+                    "The `anthropic` SDK is not installed. Run `pip install anthropic`."
                 ) from e
             kwargs = {"api_key": self._api_key}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
             self._client = anthropic.Anthropic(**kwargs)
 
-    def complete(self, system: str, messages: list[dict], *, model: str | None = None) -> str:
+    def complete(self, system: str, messages: list[dict], *, model: str | None = None, on_chunk=None) -> str:
         self._ensure()
+        model = model or self._model
+        if on_chunk:
+            try:
+                parts: list[str] = []
+                with self._client.messages.stream(
+                    model=model, max_tokens=4096, system=system, messages=messages
+                ) as stream:
+                    for text in stream.text_stream:
+                        on_chunk(text)
+                        parts.append(text)
+                return "".join(parts)
+            except Exception:
+                pass  # streaming not supported by this endpoint; fall back below
         resp = self._client.messages.create(
-            model=model or self._model,
-            max_tokens=4096,
-            system=system,
-            messages=messages,
+            model=model, max_tokens=4096, system=system, messages=messages
         )
         return "".join(block.text for block in resp.content if getattr(block, "text", None))
 
 
 class OpenAIProvider:
-    """Any OpenAI-compatible Chat Completions endpoint (proprietary or
-    open-source, e.g. Ollama / vLLM / LM Studio)."""
+    """Any OpenAI-compatible Chat Completions endpoint."""
 
     def __init__(self, api_key: str | None, base_url: str | None = None, model: str | None = None):
         self._api_key = api_key
@@ -71,22 +84,34 @@ class OpenAIProvider:
         if self._client is None:
             try:
                 import openai
-            except ImportError as e:  # pragma: no cover - depends on env
+            except ImportError as e:
                 raise RuntimeError(
-                    "The `openai` SDK is not installed. Install it with `pip install openai`."
+                    "The `openai` SDK is not installed. Run `pip install openai`."
                 ) from e
             kwargs = {"api_key": self._api_key or "not-required"}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
             self._client = openai.OpenAI(**kwargs)
 
-    def complete(self, system: str, messages: list[dict], *, model: str | None = None) -> str:
+    def complete(self, system: str, messages: list[dict], *, model: str | None = None, on_chunk=None) -> str:
         self._ensure()
-        resp = self._client.chat.completions.create(
-            model=model or self._model,
-            messages=[{"role": "system", "content": system}, *messages],
-            max_tokens=4096,
-        )
+        model = model or self._model
+        msgs = [{"role": "system", "content": system}, *messages]
+        if on_chunk:
+            try:
+                parts: list[str] = []
+                stream = self._client.chat.completions.create(
+                    model=model, messages=msgs, max_tokens=4096, stream=True
+                )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        on_chunk(delta)
+                        parts.append(delta)
+                return "".join(parts)
+            except Exception:
+                pass  # streaming not supported; fall back below
+        resp = self._client.chat.completions.create(model=model, messages=msgs, max_tokens=4096)
         return resp.choices[0].message.content or ""
 
 

@@ -148,7 +148,6 @@ Bring your own model. Func-Forger talks to any LLM API you configure:
 | `--embed-model` | `FORGER_EMBED_MODEL` | embedding model id or local path (default: `BAAI/bge-small-en-v1.5`) |
 | `--embed` | — | enable semantic search (same as the default) |
 | `--no-embed` | — | disable semantic search (token search only) |
-| `--repl` | — | use the legacy conversational REPL instead of the TUI |
 
 API keys are read from `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` or
 `OPENAI_API_KEY`. Backend settings can also be changed live in the app with `F4`.

@@ -1,9 +1,8 @@
 """Command-line entry point.
 
-Launches the two-pane TUI by default (auto-indexing the library on first run).
-``--repl`` selects the legacy conversational REPL; ``forger ingest <dir>``
-forces a full re-index. Configuration precedence is: explicit REPL value >
-CLI flag > environment variable > built-in default.
+Launches the two-pane TUI. On first run in a directory with source, it
+auto-indexes the existing code. Configuration precedence: CLI flag >
+environment variable > built-in default.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ def build_parser() -> argparse.ArgumentParser:
             "docs, files them in a library, and reuses existing definitions."
         ),
     )
-    parser.add_argument("--repl", action="store_true", help="legacy conversational REPL")
     parser.add_argument("--library", "-l", help="library/codebase directory (default: ./library)")
     parser.add_argument("--provider", help="LLM backend: anthropic | openai-compat")
     parser.add_argument("--model", help="model id")
@@ -68,12 +66,6 @@ def main(argv: list[str] | None = None) -> None:
         config.embed_provider = "fastembed"  # enable semantic search explicitly
     if ns.no_embed:
         config.embed_provider = "none"
-
-    if ns.repl:
-        from forger.repl import REPL
-
-        REPL(config).run()
-        return
 
     # TUI: first-time integration — index the existing source only when there is
     # no manifest yet. After that the manifest persists; re-indexing later is a

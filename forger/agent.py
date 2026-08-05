@@ -189,6 +189,7 @@ def forge_documented(
     on_turn=None,
     own_names: set[str] | None = None,
     embedder: Embedder | None = None,
+    on_chunk=None,
 ) -> ForgeResult:
     """Run the agent to turn ``skeleton`` into a documented, implemented module.
 
@@ -227,7 +228,7 @@ def forge_documented(
     raw_turns: list[str] = []
 
     for _ in range(max_turns):
-        raw = llm.complete(AGENT_SYSTEM, messages)
+        raw = llm.complete(AGENT_SYSTEM, messages, on_chunk=on_chunk)
         raw_turns.append(raw)
         new_searches = _parse_searches(raw)
         new_lookups = _parse_lookups(raw)

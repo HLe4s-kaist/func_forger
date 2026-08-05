@@ -24,7 +24,7 @@ class FakeLLM:
     def __init__(self, *responses):
         self.responses = list(responses)
 
-    def complete(self, system, messages, *, model=None):
+    def complete(self, system, messages, *, model=None, on_chunk=None):
         return self.responses.pop(0)
 
 
