@@ -409,12 +409,12 @@ class ForgeApp(App):
             return
         self._saved_entry = None
         self._flash(self.query_one("#status", Static), "cyan")
+        self._begin_forging()
         self._do_forge(skeleton)
 
     @work(thread=True, exclusive=True)
     def _do_forge(self, skeleton: str) -> None:
         self._skeleton = skeleton
-        self.call_from_thread(self._begin_forging)
 
         def on_turn(raw, searches, code):
             if searches:
