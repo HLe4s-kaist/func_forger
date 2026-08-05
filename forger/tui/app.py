@@ -29,6 +29,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.color import Color
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Label, OptionList, RichLog, Select, Static, TextArea, Tree
@@ -64,6 +65,14 @@ class State:
     ENTRY = "entry"
     FORGING = "forging"
     REVIEW = "review"
+
+
+class StreamUpdate(Message):
+    """Cross-thread message: write text to the stream panel."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        super().__init__()
 
 
 class InstructionScreen(ModalScreen[str]):
@@ -272,9 +281,10 @@ class ForgeApp(App):
         self._last_status_msg = msg
         self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
 
-    def _stream_show(self, raw: str) -> None:
-        """Show a complete LLM response in the stream panel."""
-        self.query_one("#stream", RichLog).write(raw)
+    @on(StreamUpdate)
+    def _on_stream_update(self, message: StreamUpdate) -> None:
+        """Handle StreamUpdate message — writes to the panel on the UI thread."""
+        self.query_one("#stream", RichLog).write(message.text)
 
     def _flash(self, widget, color: str = "green", hold: float = 0.18) -> None:
         """A brief "whoosh": pulse a widget's background to ``color`` and back.
@@ -425,7 +435,9 @@ class ForgeApp(App):
                 msg = "thinking…"
             # Show in the status bar (guaranteed visible — spinner renders there)
             self.call_from_thread(setattr, self, "_forging_msg", msg)
-            # Write full response to file (tail -f /tmp/forger_stream.log)
+            # Post a message to write to the stream panel (processed on UI thread)
+            self.post_message(StreamUpdate(raw))
+            # Also write to file
             try:
                 with open("/tmp/forger_stream.log", "a") as f:
                     f.write(raw + "\n--- turn ---\n")
