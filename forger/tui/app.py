@@ -223,6 +223,8 @@ class ForgeApp(App):
         self._vim_mode = "normal"
         self._last_status_msg = ""
         self._forging_msg = ""
+        self._stream_next = ""  # worker sets this; spinner pushes to panel
+        self._stream_last = ""  # what's currently shown
         self._spin_i = 0
         self._spin_timer = None
         self._reveal_timer = None
@@ -272,10 +274,6 @@ class ForgeApp(App):
     def _set_status(self, msg: str) -> None:
         self._last_status_msg = msg
         self.query_one("#status", Static).update(f"[{self._vim_mode.upper()}] {msg}")
-
-    def _update_stream(self, text: str) -> None:
-        """Write text to the stream panel (TextArea — same widget type as the editor)."""
-        self.query_one("#stream", TextArea).text = text
 
     def _flash(self, widget, color: str = "green", hold: float = 0.18) -> None:
         """A brief "whoosh": pulse a widget's background to ``color`` and back.
@@ -424,10 +422,10 @@ class ForgeApp(App):
                 msg = "code: " + first_line if first_line else "code generated"
             else:
                 msg = "thinking…"
-            # Show in the status bar (guaranteed visible — spinner renders there)
-            self.call_from_thread(setattr, self, "_forging_msg", msg)
-            # Write to stream panel (TextArea — guaranteed to render, same widget as editor)
-            self.call_from_thread(self._update_stream, raw)
+            # Update status bar message (spinner picks this up)
+            self._forging_msg = msg
+            # Update stream panel content (spinner picks this up on next tick)
+            self._stream_next += "\n--- Agent response ---\n" + raw
             # Also write to file
             try:
                 with open("/tmp/forger_stream.log", "a") as f:
@@ -436,10 +434,12 @@ class ForgeApp(App):
                 pass
 
         try:
-            self.call_from_thread(setattr, self, "_forging_msg", "parsing skeleton…")
+            self._forging_msg = "parsing skeleton…"
+            self._stream_next = "=== Forge started ===\nParsing skeleton..."
             module = normalize(skeleton, InputKind.CODE, self.language, self.llm)
             self._last_module = module
-            self.call_from_thread(self._set_language, module.target_language)
+            self._forging_msg = "generating code…"
+            self._stream_next += f"\nParsed: {module.target_language} ({len(module.definitions)} def(s))\nGenerating code..."
             result = forge_documented(
                 skeleton, module.target_language, self.manifest, self.llm,
                 on_turn=on_turn, own_names=set(module.names()), embedder=self.embedder,
@@ -456,7 +456,9 @@ class ForgeApp(App):
         self.state = State.FORGING
         self._forging_msg = "starting…"
         self._spin_i = 0
-        self.query_one("#stream", TextArea).text = ""
+        self.query_one("#stream", TextArea).text = "=== Forge started ==="
+        self._stream_next = "=== Forge started ==="
+        self._stream_last = "=== Forge started ==="
         try:
             open("/tmp/forger_stream.log", "w").close()
         except Exception:
@@ -474,11 +476,19 @@ class ForgeApp(App):
         glyphs = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self._spin_i = (self._spin_i + 1) % len(glyphs)
         self.query_one("#status", Static).update(f"{glyphs[self._spin_i]} {self._forging_msg}")
+        # Push pending stream content to the panel (runs on UI thread — reliable)
+        if self._stream_next != self._stream_last:
+            self._stream_last = self._stream_next
+            self.query_one("#stream", TextArea).text = self._stream_next
 
     def _finish_forging(self, result) -> None:
         self._stop_spinner()
         self._last_result = result
-        # Write code directly (no morph animation — simpler, faster, no glitches)
+        # Final push of any pending stream content
+        if self._stream_next != self._stream_last:
+            self._stream_last = self._stream_next
+            self.query_one("#stream", TextArea).text = self._stream_next
+        # Write code directly
         editor = self.query_one("#editor", TextArea)
         editor.text = result.code
         self._enter_review()
