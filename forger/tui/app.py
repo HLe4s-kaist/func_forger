@@ -174,7 +174,7 @@ class ForgeApp(App):
                padding: 0 0 0 1; }
     #editor { height: 1fr; border: round $primary; }
     #editor.vim-insert { border: round $success; }
-    #stream { height: 8; border: round $accent; color: $text; padding: 0 1; }
+    #stream { height: 12; border: round $accent; color: $text; padding: 0 1; }
     #status { height: 1; background: $boost; color: $text; padding: 0 1; }
     #funclist { height: 1fr; border: round $panel; }
     #filetree { height: 1fr; border: round $panel; }
@@ -421,8 +421,8 @@ class ForgeApp(App):
                 msg = "thinking…"
             # Update status bar message (spinner picks this up)
             self._forging_msg = msg
-            # Update stream panel content (spinner picks this up on next tick)
-            self._stream_next += "\n--- Agent response ---\n" + raw
+            # Replace panel with just the agent response (not accumulated progress)
+            self._stream_next = raw
             # Also write to file
             try:
                 with open("/tmp/forger_stream.log", "a") as f:
