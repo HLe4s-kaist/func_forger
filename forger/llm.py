@@ -64,11 +64,17 @@ class AnthropicProvider:
                         parts.append(text)
                 return "".join(parts)
             except Exception:
-                pass  # streaming not supported by this endpoint; fall back below
-        resp = self._client.messages.create(
-            model=model, max_tokens=4096, system=system, messages=messages
-        )
-        return "".join(block.text for block in resp.content if getattr(block, "text", None))
+                pass  # streaming not supported; fall back below
+        for attempt in range(2):
+            try:
+                resp = self._client.messages.create(
+                    model=model, max_tokens=4096, system=system, messages=messages
+                )
+                return "".join(block.text for block in resp.content if getattr(block, "text", None))
+            except Exception:
+                if attempt == 0:
+                    continue  # retry once on connection error
+                raise
 
 
 class OpenAIProvider:
@@ -110,9 +116,15 @@ class OpenAIProvider:
                         parts.append(delta)
                 return "".join(parts)
             except Exception:
-                pass  # streaming not supported; fall back below
-        resp = self._client.chat.completions.create(model=model, messages=msgs, max_tokens=4096)
-        return resp.choices[0].message.content or ""
+                pass
+        for attempt in range(2):
+            try:
+                resp = self._client.chat.completions.create(model=model, messages=msgs, max_tokens=4096)
+                return resp.choices[0].message.content or ""
+            except Exception:
+                if attempt == 0:
+                    continue
+                raise
 
 
 def make_provider(config) -> LLMProvider:

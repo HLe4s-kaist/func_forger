@@ -482,7 +482,10 @@ class ForgeApp(App):
     def _finish_forging(self, result) -> None:
         self._stop_spinner()
         self._last_result = result
-        self._reveal_code(result.code)
+        # Write code directly (no morph animation — simpler, faster, no glitches)
+        editor = self.query_one("#editor", TextArea)
+        editor.text = result.code
+        self._enter_review()
 
     def _reveal_code(self, code: str) -> None:
         if self._reveal_timer is not None:

@@ -52,9 +52,9 @@ definitions it uses and why.
 Write specific, searchable prose -- use the words someone would type to find \
 this definition again. Add concise inline comments on non-obvious lines.
 
-BEFORE writing any code, you MUST check the library for definitions you can \
-reuse (functions to call, types/macros to reference). This is mandatory. You \
-have two tools, each written as its own line:
+BEFORE writing any code, check the library for definitions you can reuse (if \
+any are available). If the available list is empty, skip searching and proceed \
+directly to implementation. You have two tools, each written as its own line:
 - `LOOKUP: <name>` -- get the EXACT kind, signature, params, return type, and \
 doc of a specific definition. Use this whenever the user references a \
 definition by name, and before you use ANY definition whose exact form is not \
