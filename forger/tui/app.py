@@ -12,9 +12,8 @@ Layout:
     +------------------------------------------------+
 
 Flow: write a skeleton in the editor -> [ctrl+g] Forge -> the agent searches the
-library, writes documented code with a typewriter reveal -> review ->
-[ctrl+p] approve (saves + indexes) / [ctrl+n] reject / [ctrl+e] edit /
-[ctrl+r] regenerate a selected range.
+library, writes documented code -> review -> [ctrl+p] approve (saves + indexes)
+/ [ctrl+n] reject / [ctrl+e] edit / [ctrl+r] regenerate a selected range.
 """
 
 from __future__ import annotations
@@ -227,10 +226,6 @@ class ForgeApp(App):
         self._stream_last = ""  # what's currently shown
         self._spin_i = 0
         self._spin_timer = None
-        self._reveal_timer = None
-        self._reveal_full = ""
-        self._reveal_start = ""
-        self._reveal_pos = 0
 
     # -- layout ------------------------------------------------------------
 
@@ -495,29 +490,6 @@ class ForgeApp(App):
         editor.text = result.code
         self._enter_review()
 
-    def _reveal_code(self, code: str) -> None:
-        if self._reveal_timer is not None:
-            self._reveal_timer.stop()
-            self._reveal_timer = None
-        self._reveal_full = code
-        # Morph from the current text (the skeleton) into the generated code,
-        # so it visibly transforms top-to-bottom rather than appearing from blank.
-        self._reveal_start = self.query_one("#editor", TextArea).text
-        self._reveal_pos = 0
-        self._reveal_timer = self.set_interval(0.02, self._reveal_tick)
-
-    def _reveal_tick(self) -> None:
-        self._reveal_pos = min(self._reveal_pos + 28, len(self._reveal_full))
-        new, skeleton, pos = self._reveal_full, self._reveal_start, self._reveal_pos
-        # Only blend in the skeleton tail while we're still inside the new code;
-        # once pos passes len(new) the new code is fully shown (no stale tail).
-        tail = skeleton[pos:] if pos < len(new) else ""
-        self.query_one("#editor", TextArea).text = new[:pos] + tail
-        if self._reveal_pos >= len(self._reveal_full):
-            self._reveal_timer.stop()
-            self._reveal_timer = None
-            self._enter_review()
-
     def _enter_review(self) -> None:
         editor = self.query_one("#editor", TextArea)
         editor.read_only = True
@@ -646,7 +618,9 @@ class ForgeApp(App):
         self._stop_spinner()
         if self._last_result is not None:
             self._last_result.code = new_code
-        self._reveal_code(new_code)
+        editor = self.query_one("#editor", TextArea)
+        editor.text = new_code
+        self._enter_review()
 
     # -- misc actions ------------------------------------------------------
 
