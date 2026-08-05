@@ -1,21 +1,12 @@
-"""Optional semantic (embedding) search over the library.
+"""Semantic (embedding) search over the library.
 
-The default search is dependency-free token overlap. This module adds an
-*optional* embedding backend: when configured, the library's definitions are
-embedded with a local model (downloaded on first use) and ranked by cosine
-similarity to the query. This catches semantic matches that token overlap
-misses (e.g. "sum two integers" <-> "add returns the arithmetic sum").
+Embeddings are ON by default (fastembed is a core dependency). The library's
+definitions are embedded with a local model and ranked by cosine similarity to
+the query, catching semantic matches token overlap misses.
 
-Design notes:
-- Zero hard dependencies. ``NullEmbedder`` (always available) is the default;
-  embedding search only activates when a backend (fastembed or
-  sentence-transformers) is installed AND selected via config. If construction
-  fails for any reason we silently fall back to NullEmbedder, so the app always
-  works.
-- Entry-text vectors are cached by text hash, so re-embedding only happens when
-  a definition's documentation changes.
-- No numpy in the public interface; vectors are ``list[float]`` and cosine is
-  computed in pure Python (libraries here are small).
+Vectors are cached by text hash. Cosine is computed in pure Python (libraries
+are small). ``NullEmbedder`` (used when ``--no-embed`` is set or the package
+is unavailable) silently falls back to token search.
 """
 
 from __future__ import annotations

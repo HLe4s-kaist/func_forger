@@ -445,6 +445,7 @@ class ForgeApp(App):
                 pass
 
         try:
+            self.call_from_thread(setattr, self, "_forging_msg", "parsing skeleton…")
             module = normalize(skeleton, InputKind.CODE, self.language, self.llm)
             self._last_module = module
             self.call_from_thread(self._set_language, module.target_language)
@@ -465,6 +466,10 @@ class ForgeApp(App):
         self._forging_msg = "starting…"
         self._spin_i = 0
         self.query_one("#stream", RichLog).clear()
+        try:
+            open("/tmp/forger_stream.log", "w").close()
+        except Exception:
+            pass
         try:
             open("/tmp/forger_stream.log", "w").close()
         except Exception:

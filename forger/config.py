@@ -1,10 +1,7 @@
 """Configuration: LLM provider/model/credentials, library location, and the
 session's current target language.
 
-Resolution precedence for every field: explicit REPL value > environment
-variable > built-in default. Provider credentials are read from the usual
-environment variables so the tool works with any open-source or proprietary
-backend without code changes.
+Resolution precedence: CLI flag > environment variable > built-in default.
 """
 
 from __future__ import annotations
@@ -44,11 +41,7 @@ def canonical_language(lang: str | None) -> str | None:
 
 @dataclass
 class Config:
-    """Mutable session configuration.
-
-    Fields are plain attributes so the REPL can mutate them with ``:lang`` /
-    ``:model`` / ``:provider`` / ``:lib`` without rebuilding the object.
-    """
+    """Mutable session configuration (set via CLI flags or in-app commands)."""
 
     library_dir: Path = Path("./library")
     provider: str = "anthropic"

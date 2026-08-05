@@ -1,12 +1,11 @@
 """The library index (``manifest.json``).
 
-The manifest lives at the root of the library directory and records every
-implemented function so the agent can discover and reuse them -- this is the
-substrate for "fast pattern matching". Each entry has an id of the form
-``<language>:<name>``; a function implemented in two languages is two entries.
+The manifest records every implemented definition so the agent can discover
+and reuse them. Each entry has an id of the form
+``<language>:<kind>:<name>``; a function and a struct with the same name are
+two entries.
 
-Updates are a full read / modify / atomic-write cycle. The REPL is
-single-threaded so no locking is required.
+Updates are a full read / modify / atomic-write cycle.
 """
 
 from __future__ import annotations

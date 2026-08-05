@@ -10,6 +10,12 @@ dist/
 .venv/
 venv/
 
+# Generated library
+library/
+
+# Test artifacts
+.forger/
+
 # Editor / OS
 .DS_Store
 .idea/

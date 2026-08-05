@@ -4,17 +4,12 @@ Search/reuse is the heart of Func-Forger, so retrieval is tuned for precision:
 
 * Identifiers are split into words (``double_sum`` and ``doubleValue`` both
   index as ``{double, sum}`` / ``{double, value}``), and generic structural
-  stopwords (``function``, ``return``, ``argument``, ``value``, ...) are
-  dropped so content words dominate.
+  stopwords are dropped so content words dominate.
 * Scoring weights the function **name** highest, then its short **description**,
-  then its full **doc** comment, plus a strong name-substring bonus (and a
-  type-shape bonus in :func:`retrieve`). The result is that a query like
-  ``"sum two integers"`` surfaces ``add`` even when the query and the name share
-  no surface form.
-
-:func:`search_library` backs the agent's free-text search tool and the
-auto-seed of candidates; :func:`retrieve` backs signature-based matching. Both
-return ``list[ManifestEntry]`` so an embeddings backend can drop in later.
+  then its full **doc** comment, plus a strong name-substring bonus.
+* When an embedder is configured (on by default), semantic search via
+  :func:`forger.embeddings.embedding_search` is used first, falling back to
+  token overlap if it returns nothing.
 """
 
 from __future__ import annotations

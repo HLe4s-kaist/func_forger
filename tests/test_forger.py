@@ -16,7 +16,7 @@ import traceback
 from pathlib import Path
 
 from forger.config import Config, canonical_language
-from forger.implementer import ImplementedModule, parse
+from forger.implementer import ImplementedModule, extract_code_block
 from forger.input import InputKind, classify, normalize
 from forger.library import write_module
 from forger.manifest import Manifest, ManifestEntry
@@ -182,30 +182,21 @@ def test_retrieve_excludes_self():
     assert all(e.name != "add" or e.target_language != "python" for e in hits)
 
 
-# -- implementer.parse -----------------------------------------------------
+# -- extract_code_block ----------------------------------------------------
 
 
-def test_parse_extracts_block_and_used_names():
-    raw = (
-        "Sure.\n"
-        "```python\n"
-        "def double_sum(x, y):\n"
-        "    return 2 * add(x, y)\n"
-        "```\n"
-    )
-    module = ModuleSpec(target_language="python", definitions=[DefSpec(name="double_sum")])
-    implemented = parse(raw, module, {"add", "mul"})
-    assert "def double_sum" in implemented.code
-    assert implemented.used_names == ["add"]
+def test_extract_code_block_basic():
+    raw = "text\n```python\ndef f():\n    return 1\n```\n"
+    assert "def f" in extract_code_block(raw)
 
 
-def test_parse_rejects_missing_code():
-    module = ModuleSpec(target_language="python", definitions=[DefSpec(name="f")])
-    try:
-        parse("no code here at all", module, set())
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
+def test_extract_code_block_inner_fence():
+    raw = "```python\ndef f():\n    doc = '```inner```'\n    return 1\n```\n"
+    assert "inner" in extract_code_block(raw)
+
+
+def test_extract_code_block_none():
+    assert extract_code_block("no code here") == ""
 
 
 # -- library.write_module --------------------------------------------------
