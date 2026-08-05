@@ -45,7 +45,7 @@ class AnthropicProvider:
                 raise RuntimeError(
                     "The `anthropic` SDK is not installed. Run `pip install anthropic`."
                 ) from e
-            kwargs = {"api_key": self._api_key}
+            kwargs = {"api_key": self._api_key, "timeout": 120.0}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
             self._client = anthropic.Anthropic(**kwargs)
@@ -94,7 +94,7 @@ class OpenAIProvider:
                 raise RuntimeError(
                     "The `openai` SDK is not installed. Run `pip install openai`."
                 ) from e
-            kwargs = {"api_key": self._api_key or "not-required"}
+            kwargs = {"api_key": self._api_key or "not-required", "timeout": 120.0}
             if self._base_url:
                 kwargs["base_url"] = self._base_url
             self._client = openai.OpenAI(**kwargs)

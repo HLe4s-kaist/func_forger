@@ -213,6 +213,7 @@ class ForgeApp(App):
         self.config = config
         self.manifest = Manifest(config.manifest_path)
         self.llm = make_provider(config)
+        print("Loading embedding model (cached after first run)...", flush=True)
         self.embedder = make_embedder(config)
         self.language = config.session_language or "c"
         self._last_module = None
